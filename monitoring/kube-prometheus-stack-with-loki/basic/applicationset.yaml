@@ -238,6 +238,18 @@ spec:
                 replicas: 0
               backend:
                 replicas: 0
+
+              # Configure or disable caching for SingleBinary mode
+              chunksCache:
+                # For SingleBinary with filesystem storage, we can disable chunks cache
+                # or reduce memory significantly since it's not as critical
+                enabled: false
+              
+              resultsCache:
+                # Results cache can be useful even in SingleBinary mode
+                enabled: true
+                # Reduce memory allocation significantly 
+                allocatedMemory: 512  # 512MB instead of default 1GB+
               
               loki:
                 commonConfig:
