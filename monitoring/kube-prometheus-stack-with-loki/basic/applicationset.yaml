@@ -1,0 +1,453 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  generators:
+  - clusters:
+      selector:
+        matchLabels:
+          monitoring: enabled
+  template:
+    metadata:
+      name: '{{name}}-monitoring'
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: default
+      destination:
+        server: '{{server}}'
+        namespace: monitoring
+      sources:
+        # kube-prometheus-stack with enhanced Grafana configuration + Non-Root Security
+        - repoURL: https://prometheus-community.github.io/helm-charts
+          chart: kube-prometheus-stack
+          targetRevision: 77.0.0
+          helm:
+            releaseName: prometheus
+            values: |
+              # Basic production-ready values with non-root security
+              prometheus:
+                prometheusSpec:
+                  retention: 30d
+                  retentionSize: 50GiB
+                  storageSpec:
+                    volumeClaimTemplate:
+                      spec:
+                        accessModes: ["ReadWriteOnce"]
+                        resources:
+                          requests:
+                            storage: 50Gi
+                  # Non-root security context for Prometheus
+                  securityContext:
+                    runAsGroup: 2000
+                    runAsNonRoot: true
+                    runAsUser: 1000
+                    fsGroup: 2000
+                    seccompProfile:
+                      type: RuntimeDefault
+                  containers:
+                    - name: prometheus
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        readOnlyRootFilesystem: true
+                        capabilities:
+                          drop: ["ALL"]
+              
+              # AlertManager with non-root security
+              alertmanager:
+                alertmanagerSpec:
+                  storage:
+                    volumeClaimTemplate:
+                      spec:
+                        accessModes: ["ReadWriteOnce"]
+                        resources:
+                          requests:
+                            storage: 5Gi
+                  # Non-root security context for AlertManager
+                  securityContext:
+                    runAsGroup: 2000
+                    runAsNonRoot: true
+                    runAsUser: 1000
+                    fsGroup: 2000
+                    seccompProfile:
+                      type: RuntimeDefault
+                  containers:
+                    - name: alertmanager
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        readOnlyRootFilesystem: true
+                        capabilities:
+                          drop: ["ALL"]
+
+              # Prometheus Operator with non-root security
+              prometheusOperator:
+                securityContext:
+                  runAsGroup: 2000
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                  fsGroup: 2000
+                  seccompProfile:
+                    type: RuntimeDefault
+                containerSecurityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop: ["ALL"]
+                admissionWebhooks:
+                  failurePolicy: Ignore
+                  patch:
+                    securityContext:
+                      runAsGroup: 2000
+                      runAsNonRoot: true
+                      runAsUser: 2000
+
+              # Node Exporter with appropriate security (needs some host access)
+              nodeExporter:
+                securityContext:
+                  runAsGroup: 65534
+                  runAsNonRoot: true
+                  runAsUser: 65534
+                  fsGroup: 65534
+                containerSecurityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop: ["ALL"]
+
+              # Kube State Metrics with non-root security
+              kubeStateMetrics:
+                securityContext:
+                  runAsGroup: 65534
+                  runAsNonRoot: true
+                  runAsUser: 65534
+                  fsGroup: 65534
+                containerSecurityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop: ["ALL"]
+              
+              grafana:
+                adminPassword: ""  # Generates random 40-char password          
+                persistence:
+                  enabled: true
+                  size: 10Gi
+                
+                # Non-root security context for Grafana (Grafana runs as UID 472 by default)
+                securityContext:
+                  runAsGroup: 472
+                  runAsNonRoot: true
+                  runAsUser: 472
+                  fsGroup: 472
+                  seccompProfile:
+                    type: RuntimeDefault
+                containerSecurityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: false  # Grafana needs to write to some directories
+                  capabilities:
+                    drop: ["ALL"]
+                
+                # Enable sidecar for automatic datasource discovery
+                sidecar:
+                  datasources:
+                    enabled: true
+                    defaultDatasourceEnabled: true
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 472
+                      runAsGroup: 472
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                        drop: ["ALL"]
+                  dashboards:
+                    enabled: true
+                    searchNamespace: ALL
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 472
+                      runAsGroup: 472
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                        drop: ["ALL"]
+                
+                # Additional data sources including Loki
+                additionalDataSources:
+                  - name: Loki
+                    type: loki
+                    url: http://loki-gateway.monitoring.svc.cluster.local
+                    access: proxy
+                    isDefault: false
+                    editable: true
+                    jsonData:
+                      maxLines: 1000
+                
+                dashboardProviders:
+                  dashboardproviders.yaml:
+                    apiVersion: 1
+                    providers:
+                    - name: 'default'
+                      orgId: 1
+                      folder: ''
+                      type: file
+                      disableDeletion: false
+                      editable: true
+                      options:
+                        path: /var/lib/grafana/dashboards/default
+                
+                dashboards:
+                  default:
+                    # Kubernetes metrics dashboards
+                    kubernetes-cluster:
+                      gnetId: 7249
+                      revision: 1
+                      datasource: Prometheus
+                    kubernetes-pods:
+                      gnetId: 6417
+                      revision: 1
+                      datasource: Prometheus
+                    node-exporter:
+                      gnetId: 1860
+                      revision: 27
+                      datasource: Prometheus
+                    # Loki logs dashboard
+                    loki-logs:
+                      gnetId: 13639
+                      revision: 2
+                      datasource: Loki
+
+        # Loki deployment with non-root security
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: loki
+          targetRevision: 6.16.0
+          helm:
+            releaseName: loki
+            values: |
+              # Explicitly set deployment mode to SingleBinary
+              deploymentMode: SingleBinary
+              
+              # Disable other deployment modes explicitly
+              read:
+                replicas: 0
+              write:
+                replicas: 0
+              backend:
+                replicas: 0
+              
+              loki:
+                commonConfig:
+                  replication_factor: 1
+                storage:
+                  type: filesystem
+                
+                # Auth disabled for internal use
+                auth_enabled: false
+                
+                # Schema configuration
+                schemaConfig:
+                  configs:
+                    - from: 2024-04-01
+                      store: tsdb
+                      object_store: filesystem
+                      schema: v13
+                      index:
+                        prefix: loki_index_
+                        period: 24h
+                
+                # Server configuration
+                server:
+                  grpc_listen_port: 9095
+                  http_listen_port: 3100
+
+              # Single binary mode with non-root security
+              singleBinary:
+                replicas: 1
+                persistence:
+                  enabled: true
+                  size: 10Gi
+                resources:
+                  limits:
+                    cpu: 500m
+                    memory: 1Gi
+                  requests:
+                    cpu: 100m
+                    memory: 256Mi
+                # Non-root security context for Loki (Loki uses UID 10001 by default)
+                podSecurityContext:
+                  runAsGroup: 10001
+                  runAsNonRoot: true
+                  runAsUser: 10001
+                  fsGroup: 10001
+                  seccompProfile:
+                    type: RuntimeDefault
+                containerSecurityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop: ["ALL"]
+
+              # Gateway configuration with non-root security
+              gateway:
+                enabled: true
+                service:
+                  type: ClusterIP
+                  port: 80
+                podSecurityContext:
+                  runAsGroup: 101
+                  runAsNonRoot: true
+                  runAsUser: 101
+                  fsGroup: 101
+                  seccompProfile:
+                    type: RuntimeDefault
+                containerSecurityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop: ["ALL"]
+
+              # Monitoring configuration
+              monitoring:
+                serviceMonitor:
+                  enabled: true
+                  labels:
+                    release: prometheus
+                
+                selfMonitoring:
+                  enabled: false
+                  grafanaAgent:
+                    installOperator: false
+
+              # Test configuration
+              test:
+                enabled: false
+
+        # Promtail for log collection with non-root security
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: promtail
+          targetRevision: 6.16.6
+          helm:
+            releaseName: promtail
+            values: |
+              config:
+                clients:
+                  - url: http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push
+                    tenant_id: 1
+                
+                # Enhanced scraping configuration
+                scrape_configs:
+                  - job_name: kubernetes-pods
+                    kubernetes_sd_configs:
+                      - role: pod
+                    pipeline_stages:
+                      - cri: {}
+                    relabel_configs:
+                      - source_labels:
+                          - __meta_kubernetes_pod_controller_name
+                        regex: ([0-9a-z-.]+?)(-[0-9a-f]{8,10})?
+                        target_label: __tmp_controller_name
+                      - source_labels:
+                          - __meta_kubernetes_pod_label_app_kubernetes_io_name
+                          - __meta_kubernetes_pod_label_app
+                          - __tmp_controller_name
+                          - __meta_kubernetes_pod_name
+                        regex: ^;*([^;]+)(;.*)?$
+                        target_label: app
+                      - source_labels:
+                          - __meta_kubernetes_pod_label_app_kubernetes_io_instance
+                          - __meta_kubernetes_pod_label_instance
+                        regex: ^;*([^;]+)(;.*)?$
+                        target_label: instance
+                      - source_labels:
+                          - __meta_kubernetes_pod_label_app_kubernetes_io_component
+                          - __meta_kubernetes_pod_label_component
+                        regex: ^;*([^;]+)(;.*)?$
+                        target_label: component
+                      - source_labels: [__meta_kubernetes_pod_node_name]
+                        target_label: node_name
+                      - source_labels: [__meta_kubernetes_namespace]
+                        target_label: namespace
+                      - source_labels: [__meta_kubernetes_pod_name]
+                        target_label: pod
+                      - source_labels: [__meta_kubernetes_pod_container_name]
+                        target_label: container
+                      - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+                        target_label: __path__
+                        separator: /
+                        replacement: /var/log/pods/*$1/*.log
+
+                  # Kubernetes events
+                  - job_name: kubernetes-events
+                    kubernetes_sd_configs:
+                      - role: events
+                    pipeline_stages:
+                      - json:
+                          expressions:
+                            reason: reason
+                            message: message
+                            type: type
+                      - labels:
+                          reason:
+                          type:
+
+              # Resource limits
+              resources:
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+
+              # Special handling for Promtail - needs to access log files as root
+              # but we can limit privileges using capabilities
+              podSecurityContext:
+                runAsGroup: 0
+                runAsUser: 0
+                fsGroup: 0
+                seccompProfile:
+                  type: RuntimeDefault
+
+              # Container security context with minimal privileges
+              containerSecurityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  # Only keep essential capabilities for log reading
+                  drop: ["ALL"]
+                  add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
+
+              # Service monitor with proper labels
+              serviceMonitor:
+                enabled: true
+                labels:
+                  release: prometheus
+
+              # Sidecar config reloader with non-root security
+              configReloader:
+                containerSecurityContext:
+                  runAsNonRoot: true
+                  runAsUser: 65534
+                  runAsGroup: 65534
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop: ["ALL"]
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true
+        - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
