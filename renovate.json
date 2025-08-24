@@ -3,7 +3,6 @@
   "extends": ["config:recommended"],
   "schedule": ["at any time"],
   "labels": ["renovate"],
-  "dryRun": "lookup",
   "argocd": {
     "fileMatch": [
       "(^|/).*\\.ya?ml$"
