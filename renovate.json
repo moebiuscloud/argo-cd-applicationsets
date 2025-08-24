@@ -1,12 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "schedule": ["every day"],
+  "schedule": ["at any time"],
   "labels": ["renovate"],
+  "dryRun": "lookup",
   "argocd": {
     "fileMatch": [
-      "**/*.yaml",
-      "**/*.yml"
+      "(^|/).*\\.ya?ml$"
     ]
   }
 }
