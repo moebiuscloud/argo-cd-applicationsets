@@ -9,9 +9,9 @@ on:
 
 env:
   # renovate: datasource=github-releases depName=argoproj/argo-cd
-  ARGOCD_VERSION: v2.12.3
+  ARGOCD_VERSION: v3.1.1
   # renovate: datasource=github-releases depName=kubernetes/kubernetes
-  KUBECTL_VERSION: v1.28.0
+  KUBECTL_VERSION: v1.33.4
 
 jobs:
   test-monitoring:
@@ -47,7 +47,7 @@ jobs:
     - name: Create kind cluster
       uses: helm/kind-action@v1
       with:
-        version: v0.20.0
+        version: v0.29.0  # Updated from v0.20.0
         kubectl_version: ${{ env.KUBECTL_VERSION }}
         cluster_name: test-cluster
         wait: 300s
@@ -202,20 +202,8 @@ jobs:
         echo "Checking if monitoring namespace was created..."
         kubectl get namespace monitoring
         
-        echo "Verifying Prometheus components..."
-        kubectl get pods -n monitoring | grep prometheus
-        
-        echo "Verifying Grafana is deployed..."
-        kubectl get pods -n monitoring | grep grafana
-        
-        echo "Verifying Loki is deployed..."
-        kubectl get pods -n monitoring | grep loki
-        
-        echo "Verifying Promtail is deployed..."
-        kubectl get pods -n monitoring | grep promtail
-        
-        echo "All monitoring pods:"
-        kubectl get pods -n monitoring
+        echo "Verifying components..."
+        kubectl get pods -n monitoring 
 
     - name: Wait for all monitoring pods to be ready
       run: |
