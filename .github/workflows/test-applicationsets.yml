@@ -181,6 +181,22 @@ jobs:
         done
         exit 1
 
+    - name: Debug Grafana init container failure
+      if: always()
+      run: |
+        echo "=== Grafana Pod Details ==="
+        kubectl get pods -n monitoring -l app.kubernetes.io/name=grafana -o wide
+        
+        echo "=== Grafana Pod Events ==="
+        kubectl describe pods -n monitoring -l app.kubernetes.io/name=grafana
+        
+        echo "=== Init Container Logs ==="
+        kubectl logs -n monitoring -l app.kubernetes.io/name=grafana --all-containers=true --previous || true
+        kubectl logs -n monitoring -l app.kubernetes.io/name=grafana --all-containers=true || true
+        
+        echo "=== Storage/PVC Status ==="
+        kubectl get pvc -n monitoring
+
     - name: Verify monitoring components are deployed
       run: |
         echo "Checking if monitoring namespace was created..."
