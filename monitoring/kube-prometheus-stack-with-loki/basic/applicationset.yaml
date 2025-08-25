@@ -341,7 +341,7 @@ spec:
         # Promtail for log collection with non-root security
         - repoURL: https://grafana.github.io/helm-charts
           chart: promtail
-          targetRevision: 6.16.6
+          targetRevision: 6.17.0
           helm:
             releaseName: promtail
             values: |
