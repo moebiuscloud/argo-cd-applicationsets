@@ -158,12 +158,18 @@ jobs:
     - name: Wait for monitoring application to sync
       run: |
         echo "Waiting for monitoring application to be created and synced..."
-        timeout 600 bash -c '
+        timeout 900 bash -c '
           while true; do
             if kubectl get application test-cluster-monitoring -n argocd &>/dev/null; then
               STATUS=$(kubectl get application test-cluster-monitoring -n argocd -o jsonpath="{.status.sync.status}")
               HEALTH=$(kubectl get application test-cluster-monitoring -n argocd -o jsonpath="{.status.health.status}")
               echo "Application sync status: $STATUS, health status: $HEALTH"
+              
+              # Show more details about what's happening
+              if [[ "$HEALTH" == "Progressing" ]]; then
+                echo "Checking pod status in monitoring namespace:"
+                kubectl get pods -n monitoring --no-headers | grep -v Running | head -5 || true
+              fi
               
               if [[ "$STATUS" == "Synced" && "$HEALTH" == "Healthy" ]]; then
                 echo "Application is synced and healthy!"
@@ -172,7 +178,7 @@ jobs:
             else
               echo "Application not found yet, waiting..."
             fi
-            sleep 10
+            sleep 15  # Reduced frequency since monitoring stacks take time
           done
         '
 
