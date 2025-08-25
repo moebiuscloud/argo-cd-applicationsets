@@ -77,7 +77,7 @@ jobs:
         kubectl wait --for=condition=available --timeout=600s deployment/argocd-dex-server -n argocd
         
         echo "Waiting for ArgoCD application controller (StatefulSet)..."
-        kubectl wait --for=condition=ready --timeout=600s pod -l app.kubernetes.io/name=argocd-application-controller -n argocd
+        kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=600s statefulset/argocd-application-controller -n argocd
 
     - name: Setup ArgoCD CLI
       run: |
@@ -111,35 +111,25 @@ jobs:
         echo "ArgoCD account info:"
         argocd account get --server localhost:8080
 
-    - name: Add test cluster to ArgoCD
+    - name: Check ArgoCD is ready
       run: |
-        echo "Adding current cluster to ArgoCD as test-cluster..."
-        argocd cluster add kind-test-cluster --name test-cluster --server localhost:8080 --yes
-        
-        echo "Verifying cluster was added:"
+        echo "ArgoCD clusters available:"
         argocd cluster list --server localhost:8080
-
-    - name: Label cluster for monitoring
-      run: |
-        echo "Labeling cluster for monitoring ApplicationSet..."
-        kubectl label secret -n argocd cluster-test-cluster monitoring=enabled
         
-        echo "Verifying cluster labels:"
-        kubectl get secrets -n argocd -l argocd.argoproj.io/secret-type=cluster -o yaml | grep -A 10 -B 5 monitoring
 
-    - name: Apply monitoring ApplicationSet
+    - name: Apply monitoring ApplicationSet and test
       run: |
         echo "Applying monitoring ApplicationSet..."
         kubectl apply -f monitoring/kube-prometheus-stack-with-loki/basic-prometheus.yaml
-       
-        echo "Verifying ApplicationSet was created:"
+        
         kubectl get applicationsets -n argocd
         
         echo "Waiting for ApplicationSet to generate applications..."
-        sleep 30
+        sleep 45
         
-        echo "Generated applications:"
+        echo "Applications generated:"
         kubectl get applications -n argocd
+        kubectl describe applicationset kube-prometheus-stack -n argocd
 
     - name: Wait for monitoring application to sync
       run: |
