@@ -72,10 +72,12 @@ jobs:
         
         echo "Waiting for ArgoCD components to be ready..."
         kubectl wait --for=condition=available --timeout=600s deployment/argocd-server -n argocd
-        kubectl wait --for=condition=available --timeout=600s deployment/argocd-application-controller -n argocd
         kubectl wait --for=condition=available --timeout=600s deployment/argocd-repo-server -n argocd
         kubectl wait --for=condition=available --timeout=600s deployment/argocd-redis -n argocd
         kubectl wait --for=condition=available --timeout=600s deployment/argocd-dex-server -n argocd
+        
+        echo "Waiting for ArgoCD application controller (StatefulSet)..."
+        kubectl wait --for=condition=ready --timeout=600s statefulset/argocd-application-controller -n argocd
 
     - name: Setup ArgoCD CLI
       run: |
