@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
 
 env:
-  # ArgoCD version to install
+  # renovate: datasource=github-releases depName=argoproj/argo-cd
   ARGOCD_VERSION: v2.12.3
-  # Kubectl version
+  # renovate: datasource=github-releases depName=kubernetes/kubernetes
   KUBECTL_VERSION: v1.28.0
 
 jobs:
@@ -110,6 +110,30 @@ jobs:
         
         echo "ArgoCD account info:"
         argocd account get --server localhost:8080
+    
+
+    - name: Create local cluster secret with monitoring label
+      run: |
+        echo "Creating secret for local cluster with monitoring label..."
+        
+        # Create a secret for the local cluster so we can add labels to it
+        kubectl create secret generic test-cluster \
+          --from-literal=name=test-cluster \
+          --from-literal=server=https://kubernetes.default.svc \
+          --from-literal=config='{"tlsClientConfig":{"insecure":true}}' \
+          -n argocd
+        
+        # Add required labels to the secret
+        kubectl label secret test-cluster \
+          argocd.argoproj.io/secret-type=cluster \
+          monitoring=enabled \
+          -n argocd
+        
+        echo "Verifying cluster secret:"
+        kubectl get secret test-cluster -n argocd -o yaml
+        
+        echo "Checking clusters available to ArgoCD:"
+        argocd cluster list --server localhost:8080
 
     - name: Check ArgoCD is ready
       run: |
