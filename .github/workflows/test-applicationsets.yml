@@ -130,8 +130,8 @@ jobs:
     - name: Apply monitoring ApplicationSet
       run: |
         echo "Applying monitoring ApplicationSet..."
-        kubectl apply -f monitoring/basic-prometheus.yaml
-        
+        kubectl apply -f monitoring/kube-prometheus-stack-with-loki/basic-prometheus.yaml
+       
         echo "Verifying ApplicationSet was created:"
         kubectl get applicationsets -n argocd
         
