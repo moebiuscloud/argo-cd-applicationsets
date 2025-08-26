@@ -1,10 +1,21 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended"
+  ],
   "schedule": ["at any time"],
   "labels": ["renovate"],
   "onboarding": false,
   "requireConfig": "required",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["\\.ya?ml$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-zA-Z0-9-._]+?) depName=(?<depName>[^\\s]+?)(?: (?:lookupName|packageName)=(?<packageName>[^\\s]+?))?(?: versioning=(?<versioning>[^\\s]+?))?(?: extractVersion=(?<extractVersion>[^\\s]+?))?\\s+[A-Za-z0-9_]+?_VERSION\\s*:\\s*[\"']?(?<currentValue>.+?)[\"']?\\s"
+      ]
+    }
+  ],
   "argocd": {
     "fileMatch": [
       "(^|/).*\\.ya?ml$"

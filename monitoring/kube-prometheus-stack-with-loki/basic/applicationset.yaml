@@ -137,6 +137,9 @@ spec:
                   enabled: true
                   size: 10Gi
                 
+                initChownData:
+                  enabled: false 
+
                 # Non-root security context for Grafana (Grafana runs as UID 472 by default)
                 securityContext:
                   runAsGroup: 472
