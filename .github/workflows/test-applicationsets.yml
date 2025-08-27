@@ -42,12 +42,31 @@ jobs:
         kubectl wait --for=condition=available --timeout=300s deployment/argocd-repo-server -n argocd
         kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=300s statefulset/argocd-application-controller -n argocd
 
-    - name: Setup ArgoCD CLI and configure local cluster
+    - name: Setup ArgoCD CLI and create required secrets
       run: |
         # Download and install CLI
         curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/download/${{ env.ARGOCD_VERSION }}/argocd-linux-amd64
         sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
         rm argocd-linux-amd64
+        
+        # Create ArgoCD server secret (required for Core mode)
+        SECRETKEY=$(openssl rand -base64 32)
+        kubectl create secret generic argocd-secret \
+          --from-literal=server.secretkey="$SECRETKEY" \
+          -n argocd || true  # Don't fail if already exists
+        
+        kubectl label secret argocd-secret \
+          app.kubernetes.io/name=argocd-secret \
+          app.kubernetes.io/part-of=argocd \
+          -n argocd || true
+        
+        # Restart ArgoCD components to pick up the server secret
+        kubectl rollout restart deployment/argocd-repo-server -n argocd
+        kubectl rollout restart statefulset/argocd-application-controller -n argocd
+        
+        # Wait for components to be ready
+        kubectl rollout status deployment/argocd-repo-server -n argocd --timeout=120s
+        kubectl rollout status statefulset/argocd-application-controller -n argocd --timeout=120s
         
         # Configure CLI for core mode (no API server)
         kubectl config set-context --current --namespace=argocd
@@ -77,13 +96,25 @@ jobs:
 
     - name: Create default AppProject  
       run: |
-        # Create default AppProject using ArgoCD CLI
-        argocd proj create default \
-          --description "Default project" \
-          --src '*' \
-          --dest '*,*' \
-          --allow-cluster-resource '*/*' \
-          --allow-namespaced-resource '*/*'
+        # Check if default project exists and update it with upsert flag
+        if argocd proj get default >/dev/null 2>&1; then
+          echo "Default project exists, updating with upsert..."
+          argocd proj create default \
+            --description "Default project" \
+            --src '*' \
+            --dest '*,*' \
+            --allow-cluster-resource '*/*' \
+            --allow-namespaced-resource '*/*' \
+            --upsert
+        else
+          echo "Creating default project..."
+          argocd proj create default \
+            --description "Default project" \
+            --src '*' \
+            --dest '*,*' \
+            --allow-cluster-resource '*/*' \
+            --allow-namespaced-resource '*/*'
+        fi
         
         echo "Verifying AppProject creation:"
         argocd proj list
