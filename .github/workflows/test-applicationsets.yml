@@ -42,7 +42,7 @@ jobs:
         kubectl wait --for=condition=available --timeout=300s deployment/argocd-repo-server -n argocd
         kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=300s statefulset/argocd-application-controller -n argocd
 
-    - name: Setup ArgoCD CLI for core mode
+    - name: Setup ArgoCD CLI and configure local cluster
       run: |
         # Download and install CLI
         curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/download/${{ env.ARGOCD_VERSION }}/argocd-linux-amd64
@@ -52,77 +52,35 @@ jobs:
         # Configure CLI for core mode (no API server)
         kubectl config set-context --current --namespace=argocd
         argocd login --core
+        
+        # Add the local cluster with monitoring label using CLI
+        # This will create all necessary secrets and configurations properly
+        argocd cluster add kubernetes-admin@kind-test-cluster --in-cluster --name test-cluster --label monitoring=enabled
+        
+        echo "Verifying cluster was added:"
+        argocd cluster list
 
-    - name: Create default AppProject and cluster secret
+    - name: Create default AppProject
       run: |
-        # Create default AppProject (required for ApplicationSets in Core mode)
-        cat <<EOF | kubectl apply -f -
-        apiVersion: argoproj.io/v1alpha1
-        kind: AppProject
-        metadata:
-          name: default
-          namespace: argocd
-          finalizers:
-            - resources-finalizer.argocd.argoproj.io
-        spec:
-          description: Default project
-          sourceRepos:
-          - '*'
-          destinations:
-          - namespace: '*'
-            server: '*'
-          clusterResourceWhitelist:
-          - group: '*'
-            kind: '*'
-          namespaceResourceWhitelist:
-          - group: '*'
-            kind: '*'
-        EOF
+        # Create default AppProject using ArgoCD CLI
+        argocd proj create default \
+          --description "Default project" \
+          --src '*' \
+          --dest '*,*' \
+          --allow-cluster-resource '*/*' \
+          --allow-namespaced-resource '*/*'
         
         echo "Verifying AppProject creation:"
-        kubectl get appproject default -n argocd
+        argocd proj list
         
-        # Create cluster secret with service account token for in-cluster access
-        SA_SECRET_NAME=$(kubectl get serviceaccount argocd-application-controller -n argocd -o jsonpath='{.secrets[0].name}' 2>/dev/null || echo "")
-        if [[ -z "$SA_SECRET_NAME" ]]; then
-          # For newer Kubernetes versions, create a token manually
-          kubectl apply -f - <<EOF
-        apiVersion: v1
-        kind: Secret
-        metadata:
-          name: argocd-application-controller-token
-          namespace: argocd
-          annotations:
-            kubernetes.io/service-account.name: argocd-application-controller
-        type: kubernetes.io/service-account-token
-        EOF
-          SA_SECRET_NAME="argocd-application-controller-token"
-          sleep 5
-        fi
-        
-        # Get the service account token
-        SA_TOKEN=$(kubectl get secret "$SA_SECRET_NAME" -n argocd -o jsonpath='{.data.token}' | base64 -d)
-        
-        # Create cluster secret with proper authentication
-        kubectl create secret generic test-cluster \
-          --from-literal=name=test-cluster \
-          --from-literal=server=https://kubernetes.default.svc \
-          --from-literal=config="{\"tlsClientConfig\":{\"insecure\":true},\"bearerToken\":\"$SA_TOKEN\"}" \
-          -n argocd
-        
-        kubectl label secret test-cluster \
-          argocd.argoproj.io/secret-type=cluster \
-          monitoring=enabled \
-          -n argocd
-        
-        echo "Verifying cluster secret:"
-        kubectl get secret test-cluster -n argocd --show-labels
+        echo "Application Controller logs (last 20 lines):"
+        kubectl logs -n argocd statefulset/argocd-application-controller --tail=20 || true
 
     - name: Test ApplicationSet
       run: |
         echo "Verifying prerequisites..."
-        kubectl get appproject default -n argocd
-        kubectl get secret test-cluster -n argocd --show-labels
+        argocd proj list
+        argocd cluster list
         
         echo "Validating ApplicationSet YAML..."
         kubectl apply --dry-run=client -f monitoring/kube-prometheus-stack-with-loki/basic/applicationset.yaml
@@ -137,15 +95,12 @@ jobs:
         
         echo "Checking for generated applications:"
         kubectl get applications -n argocd
-        
-        # Check ApplicationSet status in detail
-        echo "ApplicationSet detailed status:"
-        kubectl get applicationset kube-prometheus-stack -n argocd -o yaml | grep -A 20 "status:"
+        argocd app list
         
         # Verify application was created
         if kubectl get application test-cluster-monitoring -n argocd &>/dev/null; then
           echo "✅ ApplicationSet successfully generated application"
-          kubectl get application test-cluster-monitoring -n argocd -o wide
+          argocd app get test-cluster-monitoring
         else
           echo "❌ ApplicationSet failed to generate application"
           kubectl describe applicationset kube-prometheus-stack -n argocd
