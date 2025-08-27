@@ -53,14 +53,29 @@ jobs:
         kubectl config set-context --current --namespace=argocd
         argocd login --core
         
-        # Add the local cluster with monitoring label using CLI
-        # This will create all necessary secrets and configurations properly
-        argocd cluster add kubernetes-admin@kind-test-cluster --in-cluster --name test-cluster --label monitoring=enabled
-        
-        echo "Verifying cluster was added:"
-        argocd cluster list
+        echo "ArgoCD Core setup complete"
 
-    - name: Create default AppProject
+    - name: Create local cluster secret manually
+      run: |
+        # In ArgoCD Core, the local cluster is NOT automatically registered
+        # We need to create a cluster secret manually for ApplicationSet cluster generator
+        
+        # Create cluster secret for local cluster with monitoring label
+        kubectl create secret generic test-cluster \
+          --from-literal=name=test-cluster \
+          --from-literal=server=https://kubernetes.default.svc \
+          --from-literal=config='{"tlsClientConfig":{"insecure":true}}' \
+          -n argocd
+        
+        kubectl label secret test-cluster \
+          argocd.argoproj.io/secret-type=cluster \
+          monitoring=enabled \
+          -n argocd
+        
+        echo "Verifying local cluster secret:"
+        kubectl get secret test-cluster -n argocd --show-labels
+
+    - name: Create default AppProject  
       run: |
         # Create default AppProject using ArgoCD CLI
         argocd proj create default \
@@ -72,15 +87,12 @@ jobs:
         
         echo "Verifying AppProject creation:"
         argocd proj list
-        
-        echo "Application Controller logs (last 20 lines):"
-        kubectl logs -n argocd statefulset/argocd-application-controller --tail=20 || true
 
     - name: Test ApplicationSet
       run: |
         echo "Verifying prerequisites..."
         argocd proj list
-        argocd cluster list
+        kubectl get secrets -n argocd -l argocd.argoproj.io/secret-type=cluster
         
         echo "Validating ApplicationSet YAML..."
         kubectl apply --dry-run=client -f monitoring/kube-prometheus-stack-with-loki/basic/applicationset.yaml
@@ -95,40 +107,16 @@ jobs:
         
         echo "Checking for generated applications:"
         kubectl get applications -n argocd
-        argocd app list
         
         # Verify application was created
         if kubectl get application test-cluster-monitoring -n argocd &>/dev/null; then
           echo "✅ ApplicationSet successfully generated application"
-          argocd app get test-cluster-monitoring
+          kubectl get application test-cluster-monitoring -n argocd -o wide
         else
           echo "❌ ApplicationSet failed to generate application"
           kubectl describe applicationset kube-prometheus-stack -n argocd
           exit 1
         fi
-
-    - name: Verify sync initiation
-      run: |
-        # In core mode, applications are managed via Kubernetes API only
-        # Wait for sync to start (don't wait for completion)
-        for i in {1..12}; do  # Max 3 minutes
-          STATUS=$(kubectl get application test-cluster-monitoring -n argocd -o jsonpath="{.status.sync.status}" 2>/dev/null || echo "Unknown")
-          HEALTH=$(kubectl get application test-cluster-monitoring -n argocd -o jsonpath="{.status.health.status}" 2>/dev/null || echo "Unknown")
-          
-          echo "Application status: sync=$STATUS, health=$HEALTH"
-          
-          # Success conditions - sync started
-          if [[ "$STATUS" == "Synced" ]] || [[ "$STATUS" == "OutOfSync" && "$HEALTH" != "Unknown" ]]; then
-            echo "✅ Application sync process initiated successfully"
-            exit 0
-          fi
-          
-          sleep 15
-        done
-        
-        echo "⚠️ Application sync may not have started properly"
-        kubectl describe application test-cluster-monitoring -n argocd
-        # Don't fail the test - sync initiation is what we're testing
 
     - name: Debug on failure
       if: failure()
@@ -139,6 +127,9 @@ jobs:
         
         echo "Applications:"
         kubectl get applications -n argocd -o wide
+        
+        echo "Cluster secrets:"
+        kubectl get secrets -n argocd -l argocd.argoproj.io/secret-type=cluster
         
         echo "Application Controller logs (last 20 lines):"
         kubectl logs -n argocd statefulset/argocd-application-controller --tail=20 || true
