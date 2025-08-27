@@ -55,7 +55,7 @@ jobs:
 
     - name: Create default AppProject and cluster secret
       run: |
-        # Create default AppProject
+        # Create default AppProject (required for ApplicationSets in Core mode)
         cat <<EOF | kubectl apply -f -
         apiVersion: argoproj.io/v1alpha1
         kind: AppProject
@@ -82,11 +82,32 @@ jobs:
         echo "Verifying AppProject creation:"
         kubectl get appproject default -n argocd
         
-        # Create cluster secret
+        # Create cluster secret with service account token for in-cluster access
+        SA_SECRET_NAME=$(kubectl get serviceaccount argocd-application-controller -n argocd -o jsonpath='{.secrets[0].name}' 2>/dev/null || echo "")
+        if [[ -z "$SA_SECRET_NAME" ]]; then
+          # For newer Kubernetes versions, create a token manually
+          kubectl apply -f - <<EOF
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: argocd-application-controller-token
+          namespace: argocd
+          annotations:
+            kubernetes.io/service-account.name: argocd-application-controller
+        type: kubernetes.io/service-account-token
+        EOF
+          SA_SECRET_NAME="argocd-application-controller-token"
+          sleep 5
+        fi
+        
+        # Get the service account token
+        SA_TOKEN=$(kubectl get secret "$SA_SECRET_NAME" -n argocd -o jsonpath='{.data.token}' | base64 -d)
+        
+        # Create cluster secret with proper authentication
         kubectl create secret generic test-cluster \
           --from-literal=name=test-cluster \
           --from-literal=server=https://kubernetes.default.svc \
-          --from-literal=config='{"tlsClientConfig":{"insecure":true}}' \
+          --from-literal=config="{\"tlsClientConfig\":{\"insecure\":true},\"bearerToken\":\"$SA_TOKEN\"}" \
           -n argocd
         
         kubectl label secret test-cluster \
