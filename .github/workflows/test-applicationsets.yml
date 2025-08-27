@@ -53,8 +53,28 @@ jobs:
         kubectl config set-context --current --namespace=argocd
         argocd login --core
 
-    - name: Create cluster secret
+    - name: Create default AppProject and cluster secret
       run: |
+        # Create default AppProject
+        cat <<EOF | kubectl apply -f -
+        apiVersion: argoproj.io/v1alpha1
+        kind: AppProject
+        metadata:
+          name: default
+          namespace: argocd
+        spec:
+          description: Default project
+          sourceRepos:
+          - '*'
+          destinations:
+          - namespace: '*'
+            server: '*'
+          clusterResourceWhitelist:
+          - group: '*'
+            kind: '*'
+        EOF
+        
+        # Create cluster secret
         kubectl create secret generic test-cluster \
           --from-literal=name=test-cluster \
           --from-literal=server=https://kubernetes.default.svc \
