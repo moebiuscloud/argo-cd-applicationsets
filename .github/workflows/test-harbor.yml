@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 35  # Harbor needs more time to start up
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Create kind cluster with extra resources
         uses: helm/kind-action@v1
         with:
