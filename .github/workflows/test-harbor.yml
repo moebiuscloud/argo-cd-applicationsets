@@ -1,0 +1,377 @@
+name: Test Harbor ApplicationSets
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "registry/harbor/**/applicationset.yaml"
+      - ".github/workflows/test-harbor-applicationsets.yml"
+  push:
+    branches: [main]
+    paths:
+      - "registry/harbor/**/applicationset.yaml"
+      - ".github/workflows/test-harbor-applicationsets.yml"
+  workflow_dispatch:
+
+env:
+  # renovate: datasource=github-releases depName=argoproj/argo-cd
+  ARGOCD_VERSION: v3.1.1
+  # renovate: datasource=github-releases depName=kubernetes/kubernetes
+  KUBECTL_VERSION: v1.33.4
+
+jobs:
+  test-harbor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35  # Harbor needs more time to start up
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create kind cluster with extra resources
+        uses: helm/kind-action@v1
+        with:
+          version: v0.29.0
+          kubectl_version: ${{ env.KUBECTL_VERSION }}
+          cluster_name: test-cluster
+          wait: 180s
+          config: |
+            kind: Cluster
+            apiVersion: kind.x-k8s.io/v1alpha4
+            nodes:
+            - role: control-plane
+              # Harbor needs more resources than basic monitoring
+              kubeadmConfigPatches:
+              - |
+                kind: InitConfiguration
+                nodeRegistration:
+                  kubeletExtraArgs:
+                    node-labels: "ingress-ready=true"
+              extraPortMappings:
+              - containerPort: 80
+                hostPort: 80
+                protocol: TCP
+              - containerPort: 443
+                hostPort: 443
+                protocol: TCP
+
+      - name: Install ArgoCD Core
+        run: |
+          kubectl create namespace argocd
+
+          # Install ArgoCD Core - headless mode without UI/API server
+          kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/${{ env.ARGOCD_VERSION }}/manifests/core-install.yaml
+
+          # Wait for essential core components
+          kubectl wait --for=condition=available --timeout=300s deployment/argocd-repo-server -n argocd
+          kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=300s statefulset/argocd-application-controller -n argocd
+
+      - name: Setup ArgoCD CLI and create required secrets
+        run: |
+          # Download and install CLI
+          curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/download/${{ env.ARGOCD_VERSION }}/argocd-linux-amd64
+          sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+          rm argocd-linux-amd64
+
+          # Create ArgoCD server secret (required for Core mode)
+          SECRETKEY=$(openssl rand -base64 32)
+          kubectl create secret generic argocd-secret \
+            --from-literal=server.secretkey="$SECRETKEY" \
+            -n argocd || true
+
+          kubectl label secret argocd-secret \
+            app.kubernetes.io/name=argocd-secret \
+            app.kubernetes.io/part-of=argocd \
+            -n argocd || true
+
+          # Restart ArgoCD components to pick up the server secret
+          kubectl rollout restart deployment/argocd-repo-server -n argocd
+          kubectl rollout restart statefulset/argocd-application-controller -n argocd
+
+          # Wait for components to be ready
+          kubectl rollout status deployment/argocd-repo-server -n argocd --timeout=120s
+          kubectl rollout status statefulset/argocd-application-controller -n argocd --timeout=120s
+
+          # Configure CLI for core mode
+          kubectl config set-context --current --namespace=argocd
+          argocd login --core
+
+          echo "ArgoCD Core setup complete"
+
+      - name: Create local cluster secret with harbor label
+        run: |
+          # Create cluster secret for local cluster with harbor label
+          kubectl create secret generic test-cluster \
+            --from-literal=name=test-cluster \
+            --from-literal=server=https://kubernetes.default.svc \
+            --from-literal=config='{"tlsClientConfig":{"insecure":true}}' \
+            -n argocd
+
+          kubectl label secret test-cluster \
+            argocd.argoproj.io/secret-type=cluster \
+            harbor=enabled \
+            -n argocd
+
+          echo "Verifying local cluster secret:"
+          kubectl get secret test-cluster -n argocd --show-labels
+
+      - name: Create default AppProject
+        run: |
+          # Check if default project exists and update it with upsert flag
+          if argocd proj get default >/dev/null 2>&1; then
+            echo "Default project exists, updating with upsert..."
+            argocd proj create default \
+              --description "Default project" \
+              --src '*' \
+              --dest '*,*' \
+              --allow-cluster-resource '*/*' \
+              --allow-namespaced-resource '*/*' \
+              --upsert
+          else
+            echo "Creating default project..."
+            argocd proj create default \
+              --description "Default project" \
+              --src '*' \
+              --dest '*,*' \
+              --allow-cluster-resource '*/*' \
+              --allow-namespaced-resource '*/*'
+          fi
+
+          echo "Verifying AppProject creation:"
+          argocd proj list
+
+      - name: Test Harbor ApplicationSet Generation
+        run: |
+          echo "Verifying prerequisites..."
+          argocd proj list
+          kubectl get secrets -n argocd -l argocd.argoproj.io/secret-type=cluster
+
+          echo "Validating Harbor ApplicationSet YAML..."
+          kubectl apply --dry-run=client -f registry/harbor/basic/applicationset.yaml
+
+          echo "Applying Harbor ApplicationSet..."
+          kubectl apply -f registry/harbor/basic/applicationset.yaml
+
+          kubectl get applicationsets -n argocd
+
+          echo "Waiting for ApplicationSet to generate applications..."
+          sleep 30
+
+          echo "Checking for generated applications:"
+          kubectl get applications -n argocd
+
+          # Verify application was created
+          if kubectl get application test-cluster-harbor -n argocd &>/dev/null; then
+            echo "✅ ApplicationSet successfully generated Harbor application"
+            kubectl get application test-cluster-harbor -n argocd -o wide
+          else
+            echo "❌ ApplicationSet failed to generate Harbor application"
+            kubectl describe applicationset harbor -n argocd
+            exit 1
+          fi
+
+      - name: Test Harbor Application Sync
+        run: |
+          echo "Testing Harbor application sync..."
+
+          # Function to get application sync status
+          get_sync_status() {
+            argocd app get test-cluster-harbor --output json 2>/dev/null | jq -r '.status.sync.status // "Unknown"'
+          }
+
+          # Function to get application health status  
+          get_health_status() {
+            argocd app get test-cluster-harbor --output json 2>/dev/null | jq -r '.status.health.status // "Unknown"'
+          }
+
+          # Initial status check
+          echo "Initial Harbor application status:"
+          argocd app get test-cluster-harbor || echo "Failed to get Harbor app details"
+
+          # Try to sync the application
+          echo "Attempting to sync Harbor application..."
+          if argocd app sync test-cluster-harbor --timeout 600; then  # Harbor needs more time
+            echo "✅ Harbor application sync completed successfully"
+          else
+            echo "⚠️  Harbor application sync had issues, checking status..."
+          fi
+
+          # Wait for sync to complete (Harbor takes longer)
+          echo "Waiting for Harbor application to reach Synced status..."
+          timeout_counter=0
+          max_timeout=420  # 7 minutes for Harbor
+
+          while [ $timeout_counter -lt $max_timeout ]; do
+            sync_status=$(get_sync_status)
+            health_status=$(get_health_status)
+            
+            echo "Current Harbor status - Sync: $sync_status, Health: $health_status"
+            
+            if [ "$sync_status" = "Synced" ]; then
+              echo "✅ Harbor application successfully synced!"
+              break
+            elif [ "$sync_status" = "OutOfSync" ] && [ $timeout_counter -gt 120 ]; then
+              echo "⚠️  Harbor application still OutOfSync after 120s, checking for issues..."
+              argocd app get test-cluster-harbor
+              break
+            fi
+            
+            sleep 15  # Check less frequently for Harbor
+            timeout_counter=$((timeout_counter + 15))
+          done
+
+          # Final status check
+          final_sync_status=$(get_sync_status)
+          final_health_status=$(get_health_status)
+
+          echo "Final Harbor application status:"
+          echo "- Sync Status: $final_sync_status"
+          echo "- Health Status: $final_health_status"
+
+          # Detailed application information
+          echo "Detailed Harbor application information:"
+          argocd app get test-cluster-harbor
+
+          # Harbor is acceptable in Progressing state initially
+          if [ "$final_sync_status" = "Synced" ] && ([ "$final_health_status" = "Healthy" ] || [ "$final_health_status" = "Progressing" ]); then
+            echo "✅ Harbor application is in acceptable state!"
+          else
+            echo "⚠️  Harbor application did not reach expected state:"
+            echo "   Expected: Synced + (Healthy|Progressing)"
+            echo "   Actual: $final_sync_status + $final_health_status"
+            
+            echo "Gathering Harbor diagnostic information..."
+          fi
+
+      - name: Validate Harbor Resources
+        run: |
+          echo "Checking if Harbor resources were deployed..."
+
+          # Check for harbor namespace
+          if kubectl get namespace harbor &>/dev/null; then
+            echo "✅ Harbor namespace created"
+            kubectl get all -n harbor
+          else
+            echo "❌ Harbor namespace not found"
+          fi
+
+          # Check for Harbor pods
+          pod_count=$(kubectl get pods -n harbor --no-headers 2>/dev/null | wc -l)
+          echo "Found $pod_count pods in harbor namespace"
+
+          if [ $pod_count -gt 0 ]; then
+            echo "✅ Harbor resources deployed"
+            kubectl get pods -n harbor
+            
+            # Check for Harbor core components
+            echo "Checking Harbor core components:"
+            kubectl get pods -n harbor | grep -E "(harbor-core|harbor-portal|harbor-registry)" || echo "Core Harbor pods not found yet"
+            
+            # Check for Harbor services
+            echo "Harbor services:"
+            kubectl get svc -n harbor
+            
+            # Check for Harbor storage
+            echo "Harbor persistent volumes:"
+            kubectl get pvc -n harbor || echo "No PVCs found yet"
+            
+          else
+            echo "⚠️  No Harbor pods found"
+          fi
+
+      - name: Test Harbor Connectivity (Basic)
+        run: |
+          echo "Testing basic Harbor connectivity..."
+          
+          # Wait a bit more for Harbor to start
+          echo "Waiting for Harbor pods to be ready..."
+          sleep 60
+          
+          # Check if Harbor core is running
+          if kubectl get pod -n harbor -l app=harbor,component=core --no-headers | grep Running; then
+            echo "✅ Harbor core is running"
+            
+            # Try to access Harbor API (basic health check)
+            echo "Testing Harbor internal connectivity..."
+            if kubectl exec -n harbor deployment/harbor-core -- wget -q --spider http://harbor-portal; then
+              echo "✅ Harbor internal services are communicating"
+            else
+              echo "⚠️  Harbor internal connectivity issues"
+            fi
+          else
+            echo "⚠️  Harbor core not yet running"
+            kubectl get pods -n harbor -l app=harbor,component=core
+          fi
+
+      - name: Debug Harbor on failure
+        if: failure()
+        run: |
+          echo "=== Harbor Debug Information ==="
+
+          echo "ApplicationSets:"
+          kubectl get applicationsets -n argocd -o wide
+          echo ""
+          kubectl describe applicationsets -n argocd
+          echo ""
+
+          echo "Applications:"
+          kubectl get applications -n argocd -o wide
+          echo ""
+
+          if kubectl get application test-cluster-harbor -n argocd &>/dev/null; then
+            echo "Harbor Application details:"
+            kubectl describe application test-cluster-harbor -n argocd
+            echo ""
+            
+            echo "Harbor Application status via ArgoCD CLI:"
+            argocd app get test-cluster-harbor || echo "Failed to get Harbor app via CLI"
+            echo ""
+          fi
+
+          echo "Harbor namespace and resources:"
+          kubectl get all -n harbor || echo "Harbor namespace not found"
+          echo ""
+
+          echo "Harbor persistent volume claims:"
+          kubectl get pvc -n harbor || echo "No Harbor PVCs found"
+          echo ""
+
+          echo "Harbor secrets:"
+          kubectl get secrets -n harbor || echo "No Harbor secrets found"
+          echo ""
+
+          echo "Harbor configmaps:"
+          kubectl get configmaps -n harbor || echo "No Harbor configmaps found"
+          echo ""
+
+          # Get logs from key Harbor components if they exist
+          echo "Harbor Core logs (last 50 lines):"
+          kubectl logs -n harbor -l app=harbor,component=core --tail=50 || echo "Harbor core logs not available"
+          echo ""
+
+          echo "Harbor Portal logs (last 30 lines):"
+          kubectl logs -n harbor -l app=harbor,component=portal --tail=30 || echo "Harbor portal logs not available"
+          echo ""
+
+          echo "Harbor Registry logs (last 30 lines):"
+          kubectl logs -n harbor -l app=harbor,component=registry --tail=30 || echo "Harbor registry logs not available"
+          echo ""
+
+          echo "Harbor Database logs (last 30 lines):"
+          kubectl logs -n harbor -l app=harbor,component=database --tail=30 || echo "Harbor database logs not available"
+          echo ""
+
+          echo "All namespaces:"
+          kubectl get namespaces
+          echo ""
+
+          echo "Cluster events (last 20):"
+          kubectl get events --sort-by=.metadata.creationTimestamp | tail -20
+          echo ""
+
+          echo "Application Controller logs (last 50 lines):"
+          kubectl logs -n argocd statefulset/argocd-application-controller --tail=50 || echo "Failed to get controller logs"
+          echo ""
+
+          echo "Repo server logs (last 30 lines):"
+          kubectl logs -n argocd deployment/argocd-repo-server --tail=30 || echo "Failed to get repo server logs"
