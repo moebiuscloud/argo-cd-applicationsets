@@ -17,6 +17,12 @@ spec:
       annotations:
         argocd.argoproj.io/sync-wave: "2"
     spec:
+      ignoreDifferences: # Quirks because the Helm chart is not fully compliant with PVC Definition
+      - group: apps
+        kind: StatefulSet
+        jsonPointers:
+        - /spec/volumeClaimTemplates/0/apiVersion
+        - /spec/volumeClaimTemplates/0/kind
       project: default
       destination:
         server: "{{server}}"
@@ -386,7 +392,6 @@ spec:
                 readOnlyRootFilesystem: true
                 capabilities:
                   drop: ["ALL"]
-
       syncPolicy:
         automated:
           prune: true
@@ -394,9 +399,12 @@ spec:
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
+          - RespectIgnoreDifferences=true
         retry:
           limit: 5
           backoff:
             duration: 5s
             factor: 2
             maxDuration: 3m
+
+
