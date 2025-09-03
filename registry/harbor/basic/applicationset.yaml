@@ -10,7 +10,7 @@ spec:
     - clusters:
         selector:
           matchLabels:
-            registry: enabled
+            harbor: enabled
   template:
     metadata:
       name: "{{name}}-harbor"
