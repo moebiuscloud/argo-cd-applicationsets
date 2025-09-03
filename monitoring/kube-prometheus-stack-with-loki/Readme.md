@@ -23,13 +23,13 @@ Visit: http://localhost:3000 (admin / password from above)
 ### **Core Stack**
 - **Prometheus** - Metrics collection (30d retention, 50GB storage)
 - **Grafana** - Visualization with pre-loaded dashboards + Loki datasource
-- **Loki** - Log aggregation (10GB storage) 
+- **Loki** - Log aggregation (10GB storage)
 - **Promtail** - Log collection from all pods
 - **AlertManager** - Alert routing (5GB storage)
 
 ### **Pre-configured Dashboards**
 - Kubernetes Cluster Overview
-- Kubernetes Pods 
+- Kubernetes Pods
 - Node Exporter Full
 - Loki Logs Dashboard
 
@@ -45,7 +45,7 @@ Visit: http://localhost:3000 (admin / password from above)
 # Prometheus
 kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090
 
-# AlertManager  
+# AlertManager
 kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-alertmanager 9093:9093
 ```
 
@@ -73,7 +73,7 @@ storageSpec:
         requests:
           storage: 100Gi
 
-# Loki  
+# Loki
 singleBinary:
   persistence:
     size: 50Gi

@@ -1,0 +1,6 @@
+[default]
+line_length = 160
+indent = 2
+sequence_style = "block"
+quote_style = "single"
+preserve_quotes = false

@@ -140,7 +140,7 @@ jobs:
             argocd app get test-cluster-harbor --output json 2>/dev/null | jq -r '.status.sync.status // "Unknown"'
           }
 
-          # Function to get application health status  
+          # Function to get application health status
           get_health_status() {
             argocd app get test-cluster-harbor --output json 2>/dev/null | jq -r '.status.health.status // "Unknown"'
           }
@@ -164,9 +164,7 @@ jobs:
           while [ $timeout_counter -lt $max_timeout ]; do
             sync_status=$(get_sync_status)
             health_status=$(get_health_status)
-            
             echo "Current Harbor status - Sync: $sync_status, Health: $health_status"
-            
             if [ "$sync_status" = "Synced" ]; then
               echo "✅ Harbor application successfully synced!"
               break
@@ -175,7 +173,6 @@ jobs:
               argocd app get test-cluster-harbor
               break
             fi
-            
             sleep 15  # Check less frequently for Harbor
             timeout_counter=$((timeout_counter + 15))
           done
@@ -198,7 +195,6 @@ jobs:
             echo "⚠️  Harbor application did not reach expected state:"
             echo "   Expected: Synced + (Healthy|Progressing)"
             echo "   Actual: $final_sync_status + $final_health_status"
-            
             echo "Gathering Harbor diagnostic information..."
           fi
       - name: Validate Harbor Resources
@@ -219,19 +215,18 @@ jobs:
           if [ $pod_count -gt 0 ]; then
             echo "✅ Harbor resources deployed"
             kubectl get pods -n harbor
-            
+
             # Check for Harbor core components
             echo "Checking Harbor core components:"
             kubectl get pods -n harbor | grep -E "(harbor-core|harbor-portal|harbor-registry)" || echo "Core Harbor pods not found yet"
-            
+
             # Check for Harbor services
             echo "Harbor services:"
             kubectl get svc -n harbor
-            
+
             # Check for Harbor storage
             echo "Harbor persistent volumes:"
             kubectl get pvc -n harbor || echo "No PVCs found yet"
-            
           else
             echo "⚠️  No Harbor pods found"
           fi
@@ -246,7 +241,7 @@ jobs:
           # Check if Harbor core is running
           if kubectl get pod -n harbor -l app=harbor,component=core --no-headers | grep Running; then
             echo "✅ Harbor core is running"
-            
+
             # Try to access Harbor API (basic health check)
             echo "Testing Harbor internal connectivity..."
             if kubectl exec -n harbor deployment/harbor-core -- wget http://harbor-portal; then
@@ -274,7 +269,6 @@ jobs:
             echo "Harbor Application details:"
             kubectl describe application test-cluster-harbor -n argocd
             echo ""
-            
             echo "Harbor Application status via ArgoCD CLI:"
             argocd app get test-cluster-harbor || echo "Failed to get Harbor app via CLI"
             echo ""

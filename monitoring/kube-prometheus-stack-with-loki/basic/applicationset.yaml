@@ -132,13 +132,12 @@ spec:
                   capabilities:
                     drop: ["ALL"]
               grafana:
-                adminPassword: ""  # Generates random 40-char password          
+                adminPassword: ""  # Generates random 40-char password
                 persistence:
                   enabled: true
                   size: 10Gi
-                
                 initChownData:
-                  enabled: false 
+                  enabled: false
 
                 # Non-root security context for Grafana (Grafana runs as UID 472 by default)
                 securityContext:
@@ -153,7 +152,7 @@ spec:
                   readOnlyRootFilesystem: false  # Grafana needs to write to some directories
                   capabilities:
                     drop: ["ALL"]
-                
+
                 # Enable sidecar for automatic datasource discovery
                 sidecar:
                   datasources:
@@ -178,7 +177,7 @@ spec:
                       readOnlyRootFilesystem: true
                       capabilities:
                         drop: ["ALL"]
-                
+
                 # Additional data sources including Loki
                 additionalDataSources:
                   - name: Loki
@@ -189,7 +188,6 @@ spec:
                     editable: true
                     jsonData:
                       maxLines: 1000
-                
                 dashboardProviders:
                   dashboardproviders.yaml:
                     apiVersion: 1
@@ -202,7 +200,6 @@ spec:
                       editable: true
                       options:
                         path: /var/lib/grafana/dashboards/default
-                
                 dashboards:
                   default:
                     # Kubernetes metrics dashboards
@@ -250,17 +247,17 @@ spec:
               resultsCache:
                 # Results cache can be useful even in SingleBinary mode
                 enabled: true
-                # Reduce memory allocation significantly 
+                # Reduce memory allocation significantly
                 allocatedMemory: 512  # 512MB instead of default 1GB+
               loki:
                 commonConfig:
                   replication_factor: 1
                 storage:
                   type: filesystem
-                
+
                 # Auth disabled for internal use
                 auth_enabled: false
-                
+
                 # Schema configuration
                 schemaConfig:
                   configs:
@@ -271,7 +268,7 @@ spec:
                       index:
                         prefix: loki_index_
                         period: 24h
-                
+
                 # Server configuration
                 server:
                   grpc_listen_port: 9095
@@ -329,7 +326,6 @@ spec:
                   enabled: true
                   labels:
                     release: prometheus
-                
                 selfMonitoring:
                   enabled: false
                   grafanaAgent:
@@ -350,7 +346,7 @@ spec:
                 clients:
                   - url: http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push
                     tenant_id: 1
-                
+
                 # Enhanced scraping configuration
                 scrape_configs:
                   - job_name: kubernetes-pods

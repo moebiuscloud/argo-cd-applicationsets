@@ -74,7 +74,7 @@ Add these labels via Infrastructure as Code (Terraform, Pulumi, etc.) for best r
 Found a bug? Have a better default? PRs welcome!
 
 - Keep templates opinionated and minimal
-- Document label requirements clearly  
+- Document label requirements clearly
 - Test on real clusters before submitting
 
 ## 📖 Learn More

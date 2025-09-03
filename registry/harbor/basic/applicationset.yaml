@@ -53,11 +53,9 @@ spec:
                 ports:
                   httpPort: 80
                   httpsPort: 443
-              
                 annotations: {}
             internalTLS:
-              enabled: false  
-              
+              enabled: false
             persistence:
               enabled: true
               resourcePolicy: keep
@@ -148,7 +146,7 @@ spec:
                   type: RuntimeDefault
               containerSecurityContext:
                 allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: false 
+                readOnlyRootFilesystem: false
                 capabilities:
                   drop: ["ALL"]
             jobservice:
@@ -177,7 +175,7 @@ spec:
                   type: RuntimeDefault
               containerSecurityContext:
                 allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: false 
+                readOnlyRootFilesystem: false
                 capabilities:
                   drop: ["ALL"]
             registry:
@@ -214,7 +212,7 @@ spec:
                   type: RuntimeDefault
               containerSecurityContext:
                 allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: false 
+                readOnlyRootFilesystem: false
                 capabilities:
                   drop: ["ALL"]
               credentials:
@@ -251,7 +249,7 @@ spec:
                   type: RuntimeDefault
               containerSecurityContext:
                 allowPrivilegeEscalation: false
-                readOnlyRootFilesystem: false 
+                readOnlyRootFilesystem: false
                 capabilities:
                   drop: ["ALL"]
             database:
@@ -271,14 +269,14 @@ spec:
                 automountServiceAccountToken: false
                 securityContext:
                   runAsNonRoot: true
-                  runAsUser: 999 
+                  runAsUser: 999
                   runAsGroup: 999
                   fsGroup: 999
                   seccompProfile:
                     type: RuntimeDefault
                 containerSecurityContext:
                   allowPrivilegeEscalation: false
-                  readOnlyRootFilesystem: false 
+                  readOnlyRootFilesystem: false
                   capabilities:
                     drop: ["ALL"]
                 livenessProbe:
@@ -301,14 +299,14 @@ spec:
                 automountServiceAccountToken: false
                 securityContext:
                   runAsNonRoot: true
-                  runAsUser: 999 
+                  runAsUser: 999
                   runAsGroup: 999
                   fsGroup: 999
                   seccompProfile:
                     type: RuntimeDefault
                 containerSecurityContext:
                   allowPrivilegeEscalation: false
-                  readOnlyRootFilesystem: false 
+                  readOnlyRootFilesystem: false
                   capabilities:
                     drop: ["ALL"]
             exporter:
