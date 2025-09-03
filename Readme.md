@@ -1,10 +1,10 @@
 # Opinionated ArgoCD ApplicationSets
 
-**Battle-tested ApplicationSet templates that actually work.**
+**ApplicationSet templates that actually work.**
 
 ## The Problem
 
-Everyone needs monitoring, ingress, cert-manager, and other core services. Everyone struggles with ApplicationSet YAML. Nobody wants to spend hours debugging templates.
+Everyone needs monitoring, ingress, cert-manager, container registry, and other core services. Everyone struggles with ApplicationSet YAML. Nobody wants to spend hours debugging templates.
 
 ## The Solution
 
@@ -12,7 +12,8 @@ Copy-paste ApplicationSets for the most common Kubernetes patterns. Opinionated,
 
 ## 📁 Available Templates
 
-- **[monitoring/](monitoring/)** - kube-prometheus-stack with Grafana dashboards
+- **[monitoring/](monitoring/)** - kube-prometheus-stack with Loki and Grafana dashboards
+- **[registry/harbor](registry/harbor)** - Harbor container registry with internal TLS
 - 🚧 **cert-manager/** - Coming soon
 - 🚧 **ingress/** - Coming soon
 
@@ -30,17 +31,26 @@ Copy-paste ApplicationSets for the most common Kubernetes patterns. Opinionated,
 
 1. **Label your clusters** in ArgoCD:
    ```bash
-   kubectl label secret my-cluster monitoring=enabled
+   kubectl label secret my-cluster monitoring=enabled harbor=enabled
    ```
 
 2. **Copy the ApplicationSet** you need:
    ```bash
-   curl -O https://raw.githubusercontent.com/mobius/opinionated-applicationsets/main/monitoring/basic-prometheus.yaml
+   curl -O https://raw.githubusercontent.com/moebiuscloud/argo-cd-applicationsets/main/monitoring/kube-prometheus-stack-with-loki/basic/applicationset.yaml
+   curl -O https://raw.githubusercontent.com/moebiuscloud/argo-cd-applicationsets/main/harbor/basic/applicationset.yaml
    ```
 
-3. **Apply to your cluster**:
+3. **Deploy via ArgoCD** (recommended - use an App of Apps pattern):
    ```bash
-   kubectl apply -f basic-prometheus.yaml
+   # Add to your app-of-apps repository
+   git add applicationset.yaml
+   git commit -m "Add monitoring and harbor ApplicationSets"
+   git push
+   ```
+
+   **Or apply directly** (for testing):
+   ```bash
+   kubectl apply -f applicationset.yaml
    ```
 
 4. **Access your services** (see individual READMEs for details)
@@ -50,6 +60,7 @@ Copy-paste ApplicationSets for the most common Kubernetes patterns. Opinionated,
 Each template requires specific labels on your ArgoCD clusters:
 
 - **monitoring**: `monitoring=enabled`
+- **harbor**: `harbor=enabled`
 - **cert-manager**: `cert-manager=enabled` (coming soon)
 - **ingress**: `ingress=enabled` (coming soon)
 
