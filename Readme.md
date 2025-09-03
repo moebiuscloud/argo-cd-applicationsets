@@ -2,6 +2,10 @@
 
 **ApplicationSet templates that actually work.**
 
+## License
+Apache License
+Version 2.0, January 2004
+
 ## The Problem
 
 Everyone needs monitoring, ingress, cert-manager, container registry, and other core services. Everyone struggles with ApplicationSet YAML. Nobody wants to spend hours debugging templates.
@@ -14,8 +18,7 @@ Copy-paste ApplicationSets for the most common Kubernetes patterns. Opinionated,
 
 - **[monitoring/](monitoring/)** - kube-prometheus-stack with Loki and Grafana dashboards
 - **[registry/harbor](registry/harbor)** - Harbor container registry with internal TLS
-- 🚧 **cert-manager/** - Coming soon
-- 🚧 **ingress/** - Coming soon
+
 
 ## 🎯 Philosophy
 
@@ -37,7 +40,7 @@ Copy-paste ApplicationSets for the most common Kubernetes patterns. Opinionated,
 2. **Copy the ApplicationSet** you need:
    ```bash
    curl -O https://raw.githubusercontent.com/moebiuscloud/argo-cd-applicationsets/main/monitoring/kube-prometheus-stack-with-loki/basic/applicationset.yaml
-   curl -O https://raw.githubusercontent.com/moebiuscloud/argo-cd-applicationsets/main/harbor/basic/applicationset.yaml
+   curl -O https://raw.githubusercontent.com/moebiuscloud/argo-cd-applicationsets/main/registry/harbor/basic/applicationset.yaml
    ```
 
 3. **Deploy via ArgoCD** (recommended - use an App of Apps pattern):

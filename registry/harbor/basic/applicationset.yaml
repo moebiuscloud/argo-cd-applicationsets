@@ -1,10 +1,11 @@
+---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
   name: harbor
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/sync-wave: '2'
 spec:
   generators:
     - clusters:
@@ -13,19 +14,19 @@ spec:
             harbor: enabled
   template:
     metadata:
-      name: "{{name}}-harbor"
+      name: '{{name}}-harbor'
       annotations:
-        argocd.argoproj.io/sync-wave: "2"
+        argocd.argoproj.io/sync-wave: '2'
     spec:
-      ignoreDifferences: # Quirks because the Helm chart is not fully compliant with PVC Definition
-      - group: apps
-        kind: StatefulSet
-        jsonPointers:
-        - /spec/volumeClaimTemplates/0/apiVersion
-        - /spec/volumeClaimTemplates/0/kind
+      ignoreDifferences:  # Quirks because the Helm chart is not fully compliant with PVC Definition
+        - group: apps
+          kind: StatefulSet
+          jsonPointers:
+            - /spec/volumeClaimTemplates/0/apiVersion
+            - /spec/volumeClaimTemplates/0/kind
       project: default
       destination:
-        server: "{{server}}"
+        server: '{{server}}'
         namespace: harbor
       source:
         repoURL: https://helm.goharbor.io
@@ -43,7 +44,6 @@ spec:
             #   existingSecretKey: HARBOR_ADMIN_PASSWORD
             # If you must use a hardcoded password for testing, change it before production deployment.
             # harborAdminPassword: "password12345"
-            
             expose:
               type: clusterIP
               tls:
@@ -55,7 +55,6 @@ spec:
                   httpsPort: 443
               
                 annotations: {}
-
             internalTLS:
               enabled: false  
               
@@ -94,17 +93,13 @@ spec:
                   subPath: ""
                   accessMode: ReadWriteOnce
                   size: 20Gi
-
             imagePullPolicy: IfNotPresent
-
             logLevel: info
-
             portal:
               image:
                 repository: goharbor/harbor-portal
                 tag: v2.11.1
               replicas: 1
-            
               service:
                 type: ClusterIP
                 ports:
@@ -131,7 +126,6 @@ spec:
                 readOnlyRootFilesystem: true
                 capabilities:
                   drop: ["ALL"]
-
             core:
               image:
                 repository: goharbor/harbor-core
@@ -157,7 +151,6 @@ spec:
                 readOnlyRootFilesystem: false 
                 capabilities:
                   drop: ["ALL"]
-
             jobservice:
               image:
                 repository: goharbor/harbor-jobservice
@@ -187,7 +180,6 @@ spec:
                 readOnlyRootFilesystem: false 
                 capabilities:
                   drop: ["ALL"]
-
             registry:
               registry:
                 image:
@@ -228,7 +220,6 @@ spec:
               credentials:
                 username: harbor_registry_user
                 password: harbor_registry_password
-
             trivy:
               enabled: true
               image:
@@ -263,7 +254,6 @@ spec:
                 readOnlyRootFilesystem: false 
                 capabilities:
                   drop: ["ALL"]
-
             database:
               type: internal
               internal:
@@ -295,7 +285,6 @@ spec:
                   timeoutSeconds: 1
                 readinessProbe:
                   timeoutSeconds: 1
-
             redis:
               type: internal
               internal:
@@ -322,7 +311,6 @@ spec:
                   readOnlyRootFilesystem: false 
                   capabilities:
                     drop: ["ALL"]
-
             exporter:
               replicas: 1
               image:
@@ -348,21 +336,17 @@ spec:
                 readOnlyRootFilesystem: true
                 capabilities:
                   drop: ["ALL"]
-
             metrics:
               enabled: true
               serviceMonitor:
-                enabled: false # Disabled by default, because we can't assume you have Prometheus Operator installed
-
+                enabled: false  # Disabled by default, because we can't assume you have Prometheus Operator installed
             updateStrategy:
               type: RollingUpdate
-
             nginx:
               image:
                 repository: goharbor/nginx-photon
                 tag: v2.11.1
               replicas: 1
-            
               service:
                 type: ClusterIP
                 ports:
@@ -406,5 +390,3 @@ spec:
             duration: 5s
             factor: 2
             maxDuration: 3m
-
-

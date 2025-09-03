@@ -1,21 +1,22 @@
+---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
   name: kube-prometheus-stack
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-wave: '1'
 spec:
   generators:
-  - clusters:
-      selector:
-        matchLabels:
-          monitoring: enabled
+    - clusters:
+        selector:
+          matchLabels:
+            monitoring: enabled
   template:
     metadata:
       name: '{{name}}-monitoring'
       annotations:
-        argocd.argoproj.io/sync-wave: "1"
+        argocd.argoproj.io/sync-wave: '1'
     spec:
       project: default
       destination:
@@ -56,7 +57,7 @@ spec:
                         readOnlyRootFilesystem: true
                         capabilities:
                           drop: ["ALL"]
-              
+
               # AlertManager with non-root security
               alertmanager:
                 alertmanagerSpec:
@@ -130,7 +131,6 @@ spec:
                   readOnlyRootFilesystem: true
                   capabilities:
                     drop: ["ALL"]
-              
               grafana:
                 adminPassword: ""  # Generates random 40-char password          
                 persistence:
@@ -233,7 +233,7 @@ spec:
             values: |
               # Explicitly set deployment mode to SingleBinary
               deploymentMode: SingleBinary
-              
+
               # Disable other deployment modes explicitly
               read:
                 replicas: 0
@@ -247,13 +247,11 @@ spec:
                 # For SingleBinary with filesystem storage, we can disable chunks cache
                 # or reduce memory significantly since it's not as critical
                 enabled: false
-              
               resultsCache:
                 # Results cache can be useful even in SingleBinary mode
                 enabled: true
                 # Reduce memory allocation significantly 
                 allocatedMemory: 512  # 512MB instead of default 1GB+
-              
               loki:
                 commonConfig:
                   replication_factor: 1
@@ -452,14 +450,11 @@ spec:
                   readOnlyRootFilesystem: true
                   capabilities:
                     drop: ["ALL"]
-
       syncPolicy:
         automated:
           prune: true
           selfHeal: true
-        syncOptions:
-        - CreateNamespace=true
-        - ServerSideApply=true
+        syncOptions: [CreateNamespace=true, ServerSideApply=true]
         retry:
           limit: 5
           backoff:

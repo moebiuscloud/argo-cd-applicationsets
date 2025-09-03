@@ -1,33 +1,29 @@
+---
 name: Test Harbor ApplicationSets
-
 on:
   pull_request:
     branches: [main]
     paths:
-      - "registry/harbor/**/applicationset.yaml"
-      - ".github/workflows/test-harbor.yml"
+      - registry/harbor/**/applicationset.yaml
+      - .github/workflows/test-harbor.yml
   push:
     branches: [main]
     paths:
-      - "registry/harbor/**/applicationset.yaml"
-      - ".github/workflows/test-harbor.yml"
+      - registry/harbor/**/applicationset.yaml
+      - .github/workflows/test-harbor.yml
   workflow_dispatch:
-
 env:
   # renovate: datasource=github-releases depName=argoproj/argo-cd
   ARGOCD_VERSION: v3.1.1
   # renovate: datasource=github-releases depName=kubernetes/kubernetes
   KUBECTL_VERSION: v1.33.4
-
 jobs:
   test-harbor:
     runs-on: ubuntu-latest
     timeout-minutes: 35  # Harbor needs more time to start up
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Create kind cluster with extra resources
         uses: helm/kind-action@v1
         with:
@@ -35,7 +31,6 @@ jobs:
           kubectl_version: ${{ env.KUBECTL_VERSION }}
           cluster_name: test-cluster
           wait: 180s
-
       - name: Install ArgoCD Core
         run: |
           kubectl create namespace argocd
@@ -46,7 +41,6 @@ jobs:
           # Wait for essential core components
           kubectl wait --for=condition=available --timeout=300s deployment/argocd-repo-server -n argocd
           kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=300s statefulset/argocd-application-controller -n argocd
-
       - name: Setup ArgoCD CLI and create required secrets
         run: |
           # Download and install CLI
@@ -59,7 +53,6 @@ jobs:
           kubectl create secret generic argocd-secret \
             --from-literal=server.secretkey="$SECRETKEY" \
             -n argocd || true
-
           kubectl label secret argocd-secret \
             app.kubernetes.io/name=argocd-secret \
             app.kubernetes.io/part-of=argocd \
@@ -76,9 +69,7 @@ jobs:
           # Configure CLI for core mode
           kubectl config set-context --current --namespace=argocd
           argocd login --core
-
           echo "ArgoCD Core setup complete"
-
       - name: Create local cluster secret with harbor label
         run: |
           # Create cluster secret for local cluster with harbor label
@@ -87,15 +78,12 @@ jobs:
             --from-literal=server=https://kubernetes.default.svc \
             --from-literal=config='{"tlsClientConfig":{"insecure":true}}' \
             -n argocd
-
           kubectl label secret test-cluster \
             argocd.argoproj.io/secret-type=cluster \
             harbor=enabled \
             -n argocd
-
           echo "Verifying local cluster secret:"
           kubectl get secret test-cluster -n argocd --show-labels
-
       - name: Create default AppProject
         run: |
           # Check if default project exists and update it with upsert flag
@@ -117,27 +105,20 @@ jobs:
               --allow-cluster-resource '*/*' \
               --allow-namespaced-resource '*/*'
           fi
-
           echo "Verifying AppProject creation:"
           argocd proj list
-
       - name: Test Harbor ApplicationSet Generation
         run: |
           echo "Verifying prerequisites..."
           argocd proj list
           kubectl get secrets -n argocd -l argocd.argoproj.io/secret-type=cluster
-
           echo "Validating Harbor ApplicationSet YAML..."
           kubectl apply --dry-run=client -f registry/harbor/basic/applicationset.yaml
-
           echo "Applying Harbor ApplicationSet..."
           kubectl apply -f registry/harbor/basic/applicationset.yaml
-
           kubectl get applicationsets -n argocd
-
           echo "Waiting for ApplicationSet to generate applications..."
           sleep 30
-
           echo "Checking for generated applications:"
           kubectl get applications -n argocd
 
@@ -150,7 +131,6 @@ jobs:
             kubectl describe applicationset harbor -n argocd
             exit 1
           fi
-
       - name: Test Harbor Application Sync
         run: |
           echo "Testing Harbor application sync..."
@@ -181,7 +161,6 @@ jobs:
           echo "Waiting for Harbor application to reach Synced status..."
           timeout_counter=0
           max_timeout=420  # 7 minutes for Harbor
-
           while [ $timeout_counter -lt $max_timeout ]; do
             sync_status=$(get_sync_status)
             health_status=$(get_health_status)
@@ -204,7 +183,6 @@ jobs:
           # Final status check
           final_sync_status=$(get_sync_status)
           final_health_status=$(get_health_status)
-
           echo "Final Harbor application status:"
           echo "- Sync Status: $final_sync_status"
           echo "- Health Status: $final_health_status"
@@ -223,7 +201,6 @@ jobs:
             
             echo "Gathering Harbor diagnostic information..."
           fi
-
       - name: Validate Harbor Resources
         run: |
           echo "Checking if Harbor resources were deployed..."
@@ -239,7 +216,6 @@ jobs:
           # Check for Harbor pods
           pod_count=$(kubectl get pods -n harbor --no-headers 2>/dev/null | wc -l)
           echo "Found $pod_count pods in harbor namespace"
-
           if [ $pod_count -gt 0 ]; then
             echo "✅ Harbor resources deployed"
             kubectl get pods -n harbor
@@ -259,15 +235,14 @@ jobs:
           else
             echo "⚠️  No Harbor pods found"
           fi
-
       - name: Test Harbor Connectivity (Basic)
         run: |
           echo "Testing basic Harbor connectivity..."
-          
+
           # Wait a bit more for Harbor to start
           echo "Waiting for Harbor pods to be ready..."
           sleep 60
-          
+
           # Check if Harbor core is running
           if kubectl get pod -n harbor -l app=harbor,component=core --no-headers | grep Running; then
             echo "✅ Harbor core is running"
@@ -283,22 +258,18 @@ jobs:
             echo "⚠️  Harbor core not yet running"
             kubectl get pods -n harbor -l app=harbor,component=core
           fi
-
       - name: Debug Harbor on failure
         if: failure()
-        run: |
+        run: |-
           echo "=== Harbor Debug Information ==="
-
           echo "ApplicationSets:"
           kubectl get applicationsets -n argocd -o wide
           echo ""
           kubectl describe applicationsets -n argocd
           echo ""
-
           echo "Applications:"
           kubectl get applications -n argocd -o wide
           echo ""
-
           if kubectl get application test-cluster-harbor -n argocd &>/dev/null; then
             echo "Harbor Application details:"
             kubectl describe application test-cluster-harbor -n argocd
@@ -308,19 +279,15 @@ jobs:
             argocd app get test-cluster-harbor || echo "Failed to get Harbor app via CLI"
             echo ""
           fi
-
           echo "Harbor namespace and resources:"
           kubectl get all -n harbor || echo "Harbor namespace not found"
           echo ""
-
           echo "Harbor persistent volume claims:"
           kubectl get pvc -n harbor || echo "No Harbor PVCs found"
           echo ""
-
           echo "Harbor secrets:"
           kubectl get secrets -n harbor || echo "No Harbor secrets found"
           echo ""
-
           echo "Harbor configmaps:"
           kubectl get configmaps -n harbor || echo "No Harbor configmaps found"
           echo ""
@@ -329,30 +296,23 @@ jobs:
           echo "Harbor Core logs (last 50 lines):"
           kubectl logs -n harbor -l app=harbor,component=core --tail=50 || echo "Harbor core logs not available"
           echo ""
-
           echo "Harbor Portal logs (last 30 lines):"
           kubectl logs -n harbor -l app=harbor,component=portal --tail=30 || echo "Harbor portal logs not available"
           echo ""
-
           echo "Harbor Registry logs (last 30 lines):"
           kubectl logs -n harbor -l app=harbor,component=registry --tail=30 || echo "Harbor registry logs not available"
           echo ""
-
           echo "Harbor Database logs (last 30 lines):"
           kubectl logs -n harbor -l app=harbor,component=database --tail=30 || echo "Harbor database logs not available"
           echo ""
-
           echo "All namespaces:"
           kubectl get namespaces
           echo ""
-
           echo "Cluster events (last 20):"
           kubectl get events --sort-by=.metadata.creationTimestamp | tail -20
           echo ""
-
           echo "Application Controller logs (last 50 lines):"
           kubectl logs -n argocd statefulset/argocd-application-controller --tail=50 || echo "Failed to get controller logs"
           echo ""
-
           echo "Repo server logs (last 30 lines):"
           kubectl logs -n argocd deployment/argocd-repo-server --tail=30 || echo "Failed to get repo server logs"
