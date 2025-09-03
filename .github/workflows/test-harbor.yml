@@ -274,7 +274,7 @@ jobs:
             
             # Try to access Harbor API (basic health check)
             echo "Testing Harbor internal connectivity..."
-            if kubectl exec -n harbor deployment/harbor-core -- wget --spider http://harbor-portal; then
+            if kubectl exec -n harbor deployment/harbor-core -- wget http://harbor-portal; then
               echo "✅ Harbor internal services are communicating"
             else
               echo "⚠️  Harbor internal connectivity issues"
