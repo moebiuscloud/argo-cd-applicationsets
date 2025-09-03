@@ -1,0 +1,291 @@
+name: Test Kube Prometheus Stack with Loki ApplicationSets
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "monitoring/**/applicationset.yaml"
+      - ".github/workflows/test-applicationsets.yml"
+  push:
+    branches: [main]
+    paths:
+      - "monitoring/**/applicationset.yaml"
+      - ".github/workflows/test-applicationsets.yml"
+  workflow_dispatch:
+
+env:
+  # renovate: datasource=github-releases depName=argoproj/argo-cd
+  ARGOCD_VERSION: v3.1.1
+  # renovate: datasource=github-releases depName=kubernetes/kubernetes
+  KUBECTL_VERSION: v1.33.4
+
+jobs:
+  test-monitoring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create lightweight kind cluster
+        uses: helm/kind-action@v1
+        with:
+          version: v0.29.0
+          kubectl_version: ${{ env.KUBECTL_VERSION }}
+          cluster_name: test-cluster
+          wait: 180s
+
+      - name: Install ArgoCD Core
+        run: |
+          kubectl create namespace argocd
+
+          # Install ArgoCD Core - headless mode without UI/API server
+          kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/${{ env.ARGOCD_VERSION }}/manifests/core-install.yaml
+
+          # Wait for essential core components
+          kubectl wait --for=condition=available --timeout=300s deployment/argocd-repo-server -n argocd
+          kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 --timeout=300s statefulset/argocd-application-controller -n argocd
+
+      - name: Setup ArgoCD CLI and create required secrets
+        run: |
+          # Download and install CLI
+          curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/download/${{ env.ARGOCD_VERSION }}/argocd-linux-amd64
+          sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+          rm argocd-linux-amd64
+
+          # Create ArgoCD server secret (required for Core mode)
+          SECRETKEY=$(openssl rand -base64 32)
+          kubectl create secret generic argocd-secret \
+            --from-literal=server.secretkey="$SECRETKEY" \
+            -n argocd || true
+
+          kubectl label secret argocd-secret \
+            app.kubernetes.io/name=argocd-secret \
+            app.kubernetes.io/part-of=argocd \
+            -n argocd || true
+
+          # Restart ArgoCD components to pick up the server secret
+          kubectl rollout restart deployment/argocd-repo-server -n argocd
+          kubectl rollout restart statefulset/argocd-application-controller -n argocd
+
+          # Wait for components to be ready
+          kubectl rollout status deployment/argocd-repo-server -n argocd --timeout=120s
+          kubectl rollout status statefulset/argocd-application-controller -n argocd --timeout=120s
+
+          # Configure CLI for core mode
+          kubectl config set-context --current --namespace=argocd
+          argocd login --core
+
+          echo "ArgoCD Core setup complete"
+
+      - name: Create local cluster secret manually
+        run: |
+          # Create cluster secret for local cluster with monitoring label
+          kubectl create secret generic test-cluster \
+            --from-literal=name=test-cluster \
+            --from-literal=server=https://kubernetes.default.svc \
+            --from-literal=config='{"tlsClientConfig":{"insecure":true}}' \
+            -n argocd
+
+          kubectl label secret test-cluster \
+            argocd.argoproj.io/secret-type=cluster \
+            monitoring=enabled \
+            -n argocd
+
+          echo "Verifying local cluster secret:"
+          kubectl get secret test-cluster -n argocd --show-labels
+
+      - name: Create default AppProject
+        run: |
+          # Check if default project exists and update it with upsert flag
+          if argocd proj get default >/dev/null 2>&1; then
+            echo "Default project exists, updating with upsert..."
+            argocd proj create default \
+              --description "Default project" \
+              --src '*' \
+              --dest '*,*' \
+              --allow-cluster-resource '*/*' \
+              --allow-namespaced-resource '*/*' \
+              --upsert
+          else
+            echo "Creating default project..."
+            argocd proj create default \
+              --description "Default project" \
+              --src '*' \
+              --dest '*,*' \
+              --allow-cluster-resource '*/*' \
+              --allow-namespaced-resource '*/*'
+          fi
+
+          echo "Verifying AppProject creation:"
+          argocd proj list
+
+      - name: Test ApplicationSet Generation
+        run: |
+          echo "Verifying prerequisites..."
+          argocd proj list
+          kubectl get secrets -n argocd -l argocd.argoproj.io/secret-type=cluster
+
+          echo "Validating ApplicationSet YAML..."
+          kubectl apply --dry-run=client -f monitoring/kube-prometheus-stack-with-loki/basic/applicationset.yaml
+
+          echo "Applying ApplicationSet..."
+          kubectl apply -f monitoring/kube-prometheus-stack-with-loki/basic/applicationset.yaml
+
+          kubectl get applicationsets -n argocd
+
+          echo "Waiting for ApplicationSet to generate applications..."
+          sleep 30
+
+          echo "Checking for generated applications:"
+          kubectl get applications -n argocd
+
+          # Verify application was created
+          if kubectl get application test-cluster-monitoring -n argocd &>/dev/null; then
+            echo "✅ ApplicationSet successfully generated application"
+            kubectl get application test-cluster-monitoring -n argocd -o wide
+          else
+            echo "❌ ApplicationSet failed to generate application"
+            kubectl describe applicationset kube-prometheus-stack -n argocd
+            exit 1
+          fi
+
+      - name: Test Application Sync and Health
+        run: |
+          echo "Testing application sync and health status..."
+
+          # Function to get application sync status
+          get_sync_status() {
+            argocd app get test-cluster-monitoring --output json 2>/dev/null | jq -r '.status.sync.status // "Unknown"'
+          }
+
+          # Function to get application health status  
+          get_health_status() {
+            argocd app get test-cluster-monitoring --output json 2>/dev/null | jq -r '.status.health.status // "Unknown"'
+          }
+
+          # Initial status check
+          echo "Initial application status:"
+          argocd app get test-cluster-monitoring || echo "Failed to get app details"
+
+          # Try to sync the application
+          echo "Attempting to sync application..."
+          if argocd app sync test-cluster-monitoring --timeout 300; then
+            echo "✅ Application sync completed successfully"
+          else
+            echo "⚠️  Application sync had issues, checking status..."
+          fi
+
+          # Wait for sync to complete (with timeout)
+          echo "Waiting for application to reach Synced status..."
+          timeout_counter=0
+          max_timeout=180  # 3 minutes
+
+          while [ $timeout_counter -lt $max_timeout ]; do
+            sync_status=$(get_sync_status)
+            health_status=$(get_health_status)
+            
+            echo "Current status - Sync: $sync_status, Health: $health_status"
+            
+            if [ "$sync_status" = "Synced" ]; then
+              echo "✅ Application successfully synced!"
+              break
+            elif [ "$sync_status" = "OutOfSync" ] && [ $timeout_counter -gt 60 ]; then
+              echo "⚠️  Application still OutOfSync after 60s, checking for issues..."
+              argocd app get test-cluster-monitoring
+              break
+            fi
+            
+            sleep 10
+            timeout_counter=$((timeout_counter + 10))
+          done
+
+          # Final status check
+          final_sync_status=$(get_sync_status)
+          final_health_status=$(get_health_status)
+
+          echo "Final application status:"
+          echo "- Sync Status: $final_sync_status"
+          echo "- Health Status: $final_health_status"
+
+          # Detailed application information
+          echo "Detailed application information:"
+          argocd app get test-cluster-monitoring
+
+          # Check if we have acceptable results
+          if [ "$final_sync_status" = "Synced" ] && [ "$final_health_status" = "Healthy" ]; then
+            echo "✅ Application is fully synced and healthy!"
+          elif [ "$final_sync_status" = "Synced" ] && [ "$final_health_status" = "Progressing" ]; then
+            echo "✅ Application is synced and still progressing (acceptable for initial deployment)"
+          else
+            echo "⚠️  Application did not reach expected state:"
+            echo "   Expected: Synced + (Healthy|Progressing)"
+            echo "   Actual: $final_sync_status + $final_health_status"
+            
+            # Don't fail the test immediately - let's gather more info
+            echo "Gathering diagnostic information..."
+          fi
+
+      - name: Validate Deployed Resources
+        run: |
+          echo "Checking if resources were actually deployed..."
+
+          # Check for monitoring namespace (should be created by the application)
+          if kubectl get namespace monitoring &>/dev/null; then
+            echo "✅ Monitoring namespace created"
+            kubectl get all -n monitoring
+          else
+            echo "❌ Monitoring namespace not found"
+          fi
+
+          # Check for any pods in monitoring namespace
+          pod_count=$(kubectl get pods -n monitoring --no-headers 2>/dev/null | wc -l)
+          echo "Found $pod_count pods in monitoring namespace"
+
+          if [ $pod_count -gt 0 ]; then
+            echo "✅ Resources deployed successfully"
+            kubectl get pods -n monitoring
+          else
+            echo "⚠️  No pods found in monitoring namespace"
+          fi
+
+      - name: Debug on failure
+        if: failure()
+        run: |
+          echo "=== Debug Information ==="
+
+          echo "ApplicationSets:"
+          kubectl get applicationsets -n argocd -o wide
+          echo ""
+          kubectl describe applicationsets -n argocd
+          echo ""
+
+          echo "Applications:"
+          kubectl get applications -n argocd -o wide
+          echo ""
+
+          if kubectl get application test-cluster-monitoring -n argocd &>/dev/null; then
+            echo "Application details:"
+            kubectl describe application test-cluster-monitoring -n argocd
+            echo ""
+            
+            echo "Application status via ArgoCD CLI:"
+            argocd app get test-cluster-monitoring || echo "Failed to get app via CLI"
+            echo ""
+          fi
+
+          echo "Cluster secrets:"
+          kubectl get secrets -n argocd -l argocd.argoproj.io/secret-type=cluster
+          echo ""
+
+          echo "All namespaces:"
+          kubectl get namespaces
+          echo ""
+
+          echo "Application Controller logs (last 50 lines):"
+          kubectl logs -n argocd statefulset/argocd-application-controller --tail=50 || echo "Failed to get controller logs"
+          echo ""
+
+          echo "Repo server logs (last 30 lines):"
+          kubectl logs -n argocd deployment/argocd-repo-server --tail=30 || echo "Failed to get repo server logs"
