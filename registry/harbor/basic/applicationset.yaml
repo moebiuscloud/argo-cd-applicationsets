@@ -1,0 +1,404 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: harbor
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            registry: enabled
+  template:
+    metadata:
+      name: "{{name}}-harbor"
+      annotations:
+        argocd.argoproj.io/sync-wave: "2"
+    spec:
+      project: default
+      destination:
+        server: "{{server}}"
+        namespace: harbor
+      source:
+        repoURL: https://helm.goharbor.io
+        chart: harbor
+        targetRevision: 1.17.1
+        helm:
+          releaseName: harbor
+          values: |
+            externalURL: http://localhost:8080
+            # WARNING: Do NOT use hardcoded passwords in production!
+            # The admin password should be stored in a Kubernetes secret.
+            # To use a secret, uncomment and configure the following lines:
+            # harborAdminPassword:
+            #   existingSecret: harbor-admin-secret
+            #   existingSecretKey: HARBOR_ADMIN_PASSWORD
+            # If you must use a hardcoded password for testing, change it before production deployment.
+            # harborAdminPassword: "password12345"
+
+            expose:
+              type: clusterIP
+              tls:
+                enabled: false
+              clusterIP:
+                name: harbor
+                ports:
+                  httpPort: 80
+                  httpsPort: 443
+              
+                annotations: {}
+
+            internalTLS:
+              enabled: false  
+              
+            persistence:
+              enabled: true
+              resourcePolicy: keep
+              persistentVolumeClaim:
+                registry:
+                  existingClaim: ""
+                  storageClass: ""
+                  subPath: ""
+                  accessMode: ReadWriteOnce
+                  size: 50Gi
+                jobservice:
+                  jobLog:
+                    existingClaim: ""
+                    storageClass: ""
+                    subPath: ""
+                    accessMode: ReadWriteOnce
+                    size: 5Gi
+                database:
+                  existingClaim: ""
+                  storageClass: ""
+                  subPath: ""
+                  accessMode: ReadWriteOnce
+                  size: 10Gi
+                redis:
+                  existingClaim: ""
+                  storageClass: ""
+                  subPath: ""
+                  accessMode: ReadWriteOnce
+                  size: 5Gi
+                trivy:
+                  existingClaim: ""
+                  storageClass: ""
+                  subPath: ""
+                  accessMode: ReadWriteOnce
+                  size: 20Gi
+
+            imagePullPolicy: IfNotPresent
+
+            logLevel: info
+
+            portal:
+              image:
+                repository: goharbor/harbor-portal
+                tag: v2.11.1
+              replicas: 1
+            
+              service:
+                type: ClusterIP
+                ports:
+                  http:
+                    port: 80
+                    targetPort: 8080
+              resources:
+                requests:
+                  memory: 256Mi
+                  cpu: 100m
+                limits:
+                  memory: 512Mi
+                  cpu: 500m
+              automountServiceAccountToken: false
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 10000
+                runAsGroup: 10000
+                fsGroup: 10000
+                seccompProfile:
+                  type: RuntimeDefault
+              containerSecurityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+
+            core:
+              image:
+                repository: goharbor/harbor-core
+                tag: v2.11.1
+              replicas: 1
+              resources:
+                requests:
+                  memory: 512Mi
+                  cpu: 100m
+                limits:
+                  memory: 1Gi
+                  cpu: 1000m
+              automountServiceAccountToken: false
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 10000
+                runAsGroup: 10000
+                fsGroup: 10000
+                seccompProfile:
+                  type: RuntimeDefault
+              containerSecurityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false 
+                capabilities:
+                  drop: ["ALL"]
+
+            jobservice:
+              image:
+                repository: goharbor/harbor-jobservice
+                tag: v2.11.1
+              replicas: 1
+              maxJobWorkers: 10
+              jobLoggers:
+                - file
+              loggerSweeperDuration: 14
+              resources:
+                requests:
+                  memory: 256Mi
+                  cpu: 100m
+                limits:
+                  memory: 512Mi
+                  cpu: 500m
+              automountServiceAccountToken: false
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 10000
+                runAsGroup: 10000
+                fsGroup: 10000
+                seccompProfile:
+                  type: RuntimeDefault
+              containerSecurityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false 
+                capabilities:
+                  drop: ["ALL"]
+
+            registry:
+              registry:
+                image:
+                  repository: goharbor/registry-photon
+                  tag: v2.11.1
+                resources:
+                  requests:
+                    memory: 256Mi
+                    cpu: 100m
+                  limits:
+                    memory: 512Mi
+                    cpu: 500m
+              controller:
+                image:
+                  repository: goharbor/harbor-registryctl
+                  tag: v2.11.1
+                resources:
+                  requests:
+                    memory: 256Mi
+                    cpu: 100m
+                  limits:
+                    memory: 512Mi
+                    cpu: 500m
+              replicas: 1
+              automountServiceAccountToken: false
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 10000
+                runAsGroup: 10000
+                fsGroup: 10000
+                seccompProfile:
+                  type: RuntimeDefault
+              containerSecurityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false 
+                capabilities:
+                  drop: ["ALL"]
+              credentials:
+                username: harbor_registry_user
+                password: harbor_registry_password
+
+            trivy:
+              enabled: true
+              image:
+                repository: goharbor/trivy-adapter-photon
+                tag: v2.11.1
+              replicas: 1
+              debugMode: false
+              vulnType: "os,library"
+              severity: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+              ignoreUnfixed: false
+              insecure: false
+              skipUpdate: false
+              offlineScan: false
+              timeout: 5m0s
+              resources:
+                requests:
+                  memory: 512Mi
+                  cpu: 200m
+                limits:
+                  memory: 1Gi
+                  cpu: 1000m
+              automountServiceAccountToken: false
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 10000
+                runAsGroup: 10000
+                fsGroup: 10000
+                seccompProfile:
+                  type: RuntimeDefault
+              containerSecurityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false 
+                capabilities:
+                  drop: ["ALL"]
+
+            database:
+              type: internal
+              internal:
+                image:
+                  repository: goharbor/harbor-db
+                  tag: v2.11.1
+                shmSizeLimit: 512Mi
+                resources:
+                  requests:
+                    memory: 256Mi
+                    cpu: 100m
+                  limits:
+                    memory: 1Gi
+                    cpu: 1000m
+                automountServiceAccountToken: false
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 999 
+                  runAsGroup: 999
+                  fsGroup: 999
+                  seccompProfile:
+                    type: RuntimeDefault
+                containerSecurityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: false 
+                  capabilities:
+                    drop: ["ALL"]
+                livenessProbe:
+                  timeoutSeconds: 1
+                readinessProbe:
+                  timeoutSeconds: 1
+
+            redis:
+              type: internal
+              internal:
+                image:
+                  repository: goharbor/redis-photon
+                  tag: v2.11.1
+                resources:
+                  requests:
+                    memory: 256Mi
+                    cpu: 100m
+                  limits:
+                    memory: 512Mi
+                    cpu: 500m
+                automountServiceAccountToken: false
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 999 
+                  runAsGroup: 999
+                  fsGroup: 999
+                  seccompProfile:
+                    type: RuntimeDefault
+                containerSecurityContext:
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: false 
+                  capabilities:
+                    drop: ["ALL"]
+
+            exporter:
+              replicas: 1
+              image:
+                repository: goharbor/harbor-exporter
+                tag: v2.11.1
+              resources:
+                requests:
+                  memory: 128Mi
+                  cpu: 100m
+                limits:
+                  memory: 256Mi
+                  cpu: 200m
+              automountServiceAccountToken: false
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 10000
+                runAsGroup: 10000
+                fsGroup: 10000
+                seccompProfile:
+                  type: RuntimeDefault
+              containerSecurityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+
+            metrics:
+              enabled: true
+              serviceMonitor:
+                enabled: true
+                additionalLabels:
+                  release: prometheus
+
+            updateStrategy:
+              type: RollingUpdate
+
+            nginx:
+              image:
+                repository: goharbor/nginx-photon
+                tag: v2.11.1
+              replicas: 1
+            
+              service:
+                type: ClusterIP
+                ports:
+                  http:
+                    port: 80
+                    targetPort: 8080
+                  https:
+                    port: 443
+                    targetPort: 8443
+              resources:
+                requests:
+                  memory: 256Mi
+                  cpu: 100m
+                limits:
+                  memory: 512Mi
+                  cpu: 500m
+              automountServiceAccountToken: false
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 10000
+                runAsGroup: 10000
+                fsGroup: 10000
+                seccompProfile:
+                  type: RuntimeDefault
+              containerSecurityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
