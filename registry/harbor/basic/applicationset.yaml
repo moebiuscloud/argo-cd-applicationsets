@@ -37,8 +37,7 @@ spec:
             #   existingSecretKey: HARBOR_ADMIN_PASSWORD
             # If you must use a hardcoded password for testing, change it before production deployment.
             # harborAdminPassword: "password12345"
-            # 
-
+            
             expose:
               type: clusterIP
               tls:
