@@ -29,7 +29,14 @@ spec:
           releaseName: harbor
           values: |
             externalURL: http://localhost:8080
-            harborAdminPassword: "password12345"
+            # WARNING: Do NOT use hardcoded passwords in production!
+            # The admin password should be stored in a Kubernetes secret.
+            # To use a secret, uncomment and configure the following lines:
+            # harborAdminPassword:
+            #   existingSecret: harbor-admin-secret
+            #   existingSecretKey: HARBOR_ADMIN_PASSWORD
+            # If you must use a hardcoded password for testing, change it before production deployment.
+            # harborAdminPassword: "password12345"
 
             expose:
               type: clusterIP
