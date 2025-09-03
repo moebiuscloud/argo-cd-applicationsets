@@ -191,8 +191,8 @@ jobs:
             if [ "$sync_status" = "Synced" ]; then
               echo "✅ Harbor application successfully synced!"
               break
-            elif [ "$sync_status" = "OutOfSync" ] && [ $timeout_counter -gt 240 ]; then
-              echo "⚠️  Harbor application still OutOfSync after 240s, checking for issues..."
+            elif [ "$sync_status" = "OutOfSync" ] && [ $timeout_counter -gt 120 ]; then
+              echo "⚠️  Harbor application still OutOfSync after 120s, checking for issues..."
               argocd app get test-cluster-harbor
               break
             fi
