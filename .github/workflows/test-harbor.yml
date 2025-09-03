@@ -5,12 +5,12 @@ on:
     branches: [main]
     paths:
       - "registry/harbor/**/applicationset.yaml"
-      - ".github/workflows/test-harbor-applicationsets.yml"
+      - ".github/workflows/test-harbor.yml"
   push:
     branches: [main]
     paths:
       - "registry/harbor/**/applicationset.yaml"
-      - ".github/workflows/test-harbor-applicationsets.yml"
+      - ".github/workflows/test-harbor.yml"
   workflow_dispatch:
 
 env:
