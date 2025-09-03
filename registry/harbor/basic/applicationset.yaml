@@ -346,9 +346,7 @@ spec:
             metrics:
               enabled: true
               serviceMonitor:
-                enabled: true
-                additionalLabels:
-                  release: prometheus
+                enabled: false # Disabled by default, because we can't assume you have Prometheus Operator installed
 
             updateStrategy:
               type: RollingUpdate
