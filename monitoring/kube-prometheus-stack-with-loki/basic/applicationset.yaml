@@ -224,7 +224,7 @@ spec:
         # Loki deployment with non-root security
         - repoURL: https://grafana.github.io/helm-charts
           chart: loki
-          targetRevision: 6.38.0
+          targetRevision: 6.39.0
           helm:
             releaseName: loki
             values: |
