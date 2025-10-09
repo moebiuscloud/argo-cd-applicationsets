@@ -1,0 +1,56 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: harbor
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '2'
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            harbor: enabled
+  template:
+    metadata:
+      name: '{{name}}-harbor'
+      annotations:
+        argocd.argoproj.io/sync-wave: '2'
+    spec:
+      ignoreDifferences:  # Quirks because the Helm chart is not fully compliant with PVC Definition
+        - group: apps
+          kind: StatefulSet
+          jsonPointers:
+            - /spec/volumeClaimTemplates/0/apiVersion
+            - /spec/volumeClaimTemplates/0/kind
+      project: default
+      destination:
+        server: '{{server}}'
+        namespace: harbor
+      sources:
+        # You need to change this to your own repo, or you will stick with my values file.
+        - repoURL: https://github.com/moebiuscloud/argo-cd-applicationsets.git
+          targetRevision: feature/remove_inline_helm_values
+          ref: values  # exposes $values to other sources
+        - repoURL: https://helm.goharbor.io
+          chart: harbor
+          targetRevision: 1.18.0
+          helm:
+            releaseName: harbor
+            valueFiles:
+              - $values/applications/harbor/values-basic.yaml
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m

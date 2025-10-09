@@ -1,0 +1,101 @@
+---
+config:
+  clients:
+    - url: http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push
+      tenant_id: 1
+
+  # Enhanced scraping configuration
+  scrape_configs:
+    - job_name: kubernetes-pods
+      kubernetes_sd_configs:
+        - role: pod
+      pipeline_stages:
+        - cri: {}
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_controller_name]
+          regex: ([0-9a-z-.]+?)(-[0-9a-f]{8,10})?
+          target_label: __tmp_controller_name
+        - source_labels:
+            - __meta_kubernetes_pod_label_app_kubernetes_io_name
+            - __meta_kubernetes_pod_label_app
+            - __tmp_controller_name
+            - __meta_kubernetes_pod_name
+          regex: ^;*([^;]+)(;.*)?$
+          target_label: app
+        - source_labels:
+            - __meta_kubernetes_pod_label_app_kubernetes_io_instance
+            - __meta_kubernetes_pod_label_instance
+          regex: ^;*([^;]+)(;.*)?$
+          target_label: instance
+        - source_labels:
+            - __meta_kubernetes_pod_label_app_kubernetes_io_component
+            - __meta_kubernetes_pod_label_component
+          regex: ^;*([^;]+)(;.*)?$
+          target_label: component
+        - source_labels: [__meta_kubernetes_pod_node_name]
+          target_label: node_name
+        - source_labels: [__meta_kubernetes_namespace]
+          target_label: namespace
+        - source_labels: [__meta_kubernetes_pod_name]
+          target_label: pod
+        - source_labels: [__meta_kubernetes_pod_container_name]
+          target_label: container
+        - source_labels:
+            - __meta_kubernetes_pod_uid
+            - __meta_kubernetes_pod_container_name
+          target_label: __path__
+          separator: /
+          replacement: /var/log/pods/*$1/*.log
+
+    # Kubernetes events
+    - job_name: kubernetes-events
+      kubernetes_sd_configs:
+        - role: events
+      pipeline_stages:
+        - json:
+            expressions:
+              reason: reason
+              message: message
+              type: type
+        - labels:
+            reason:
+            type:
+# Resource limits
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+# Special handling for Promtail - needs to access log files as root
+# but we can limit privileges using capabilities
+podSecurityContext:
+  runAsGroup: 0
+  runAsUser: 0
+  fsGroup: 0
+  seccompProfile:
+    type: RuntimeDefault
+# Container security context with minimal privileges
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    # Only keep essential capabilities for log reading
+    drop: [ALL]
+    add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+# Service monitor with proper labels
+serviceMonitor:
+  enabled: true
+  labels:
+    release: prometheus
+# Sidecar config reloader with non-root security
+configReloader:
+  containerSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]

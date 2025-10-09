@@ -1,0 +1,68 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '1'
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            monitoring: enabled
+  template:
+    metadata:
+      name: '{{name}}-monitoring'
+      annotations:
+        argocd.argoproj.io/sync-wave: '1'
+    spec:
+      project: default
+      destination:
+        server: '{{server}}'
+        namespace: monitoring
+      sources:
+        # kube-prometheus-stack with enhanced Grafana configuration + Non-Root Security
+        # You need to change this to your own repo, or you will stick with my values file.
+        - repoURL: https://github.com/moebiuscloud/argo-cd-applicationsets.git
+          targetRevision: feature/remove_inline_helm_values
+          ref: values  # exposes $values to other sources
+
+
+        - repoURL: https://prometheus-community.github.io/helm-charts
+          chart: kube-prometheus-stack
+          targetRevision: 77.12.0
+          helm:
+            releaseName: prometheus
+            valueFiles:
+              - $values/applications/kube-prometheus-stack/values-basic.yaml
+
+        # Loki deployment with non-root security
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: loki
+          targetRevision: 6.41.1
+          helm:
+            releaseName: loki
+            valueFiles:
+              - $values/applications/loki/values-basic.yaml
+
+        # Promtail for log collection with non-root security
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: promtail
+          targetRevision: 6.17.0
+          helm:
+            releaseName: promtail
+            valueFiles:
+              - $values/applications/promtail/values-basic.yaml
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions: [CreateNamespace=true, ServerSideApply=true]
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
