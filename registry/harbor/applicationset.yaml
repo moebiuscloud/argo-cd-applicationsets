@@ -39,7 +39,7 @@ spec:
           helm:
             releaseName: harbor
             valueFiles:
-              - $values/applications/applications/harbor/values-basic.yaml
+              - $values/applications/harbor/values-basic.yaml
       syncPolicy:
         automated:
           prune: true
