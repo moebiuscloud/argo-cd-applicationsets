@@ -29,7 +29,7 @@ spec:
           targetRevision: 77.12.0
           helm:
             releaseName: prometheus
-            valuesFiles:
+            valueFiles:
               - ../../applications/kube-prometheus-stack/values-basic.yaml
 
         # Loki deployment with non-root security
@@ -38,7 +38,7 @@ spec:
           targetRevision: 6.41.1
           helm:
             releaseName: loki
-            valuesFiles:
+            valueFiles:
               - ../../applications/loki/values-basic.yaml
 
         # Promtail for log collection with non-root security
@@ -47,7 +47,8 @@ spec:
           targetRevision: 6.17.0
           helm:
             releaseName: promtail
-            valuesFiles: [../../applications/promtail/values-basic.yaml]
+            valueFiles:
+              - ../../applications/promtail/values-basic.yaml
       syncPolicy:
         automated:
           prune: true
