@@ -113,9 +113,9 @@ jobs:
           argocd proj list
           kubectl get secrets -n argocd -l argocd.argoproj.io/secret-type=cluster
           echo "Validating ApplicationSet YAML..."
-          kubectl apply --dry-run=client -f monitoring/kube-prometheus-stack-with-loki/basic/applicationset.yaml
+          kubectl apply --dry-run=client -f monitoring/kube-prometheus-stack-with-loki/applicationset.yaml
           echo "Applying ApplicationSet..."
-          kubectl apply -f monitoring/kube-prometheus-stack-with-loki/basic/applicationset.yaml
+          kubectl apply -f monitoring/kube-prometheus-stack-with-loki/applicationset.yaml
           kubectl get applicationsets -n argocd
           echo "Waiting for ApplicationSet to generate applications..."
           sleep 30

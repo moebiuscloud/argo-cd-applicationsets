@@ -1,0 +1,101 @@
+---
+# Explicitly set deployment mode to SingleBinary
+deploymentMode: SingleBinary
+# Disable other deployment modes explicitly
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+# Configure or disable caching for SingleBinary mode
+chunksCache:
+  # For SingleBinary with filesystem storage, we can disable chunks cache
+  # or reduce memory significantly since it's not as critical
+  enabled: false
+resultsCache:
+  # Results cache can be useful even in SingleBinary mode
+  enabled: true
+  # Reduce memory allocation significantly
+  allocatedMemory: 512  # 512MB instead of default 1GB+
+loki:
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+
+  # Auth disabled for internal use
+  auth_enabled: false
+
+  # Schema configuration
+  schemaConfig:
+    configs:
+      - from: 2024-04-01
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  # Server configuration
+  server:
+    grpc_listen_port: 9095
+    http_listen_port: 3100
+# Single binary mode with non-root security
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  # Non-root security context for Loki (Loki uses UID 10001 by default)
+  podSecurityContext:
+    runAsGroup: 10001
+    runAsNonRoot: true
+    runAsUser: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+# Gateway configuration with non-root security
+gateway:
+  enabled: true
+  service:
+    type: ClusterIP
+    port: 80
+  podSecurityContext:
+    runAsGroup: 101
+    runAsNonRoot: true
+    runAsUser: 101
+    fsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+# Monitoring configuration
+monitoring:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: prometheus
+  selfMonitoring:
+    enabled: false
+    grafanaAgent:
+      installOperator: false
+# Test configuration
+test:
+  enabled: false

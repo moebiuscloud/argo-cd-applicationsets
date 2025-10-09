@@ -4,12 +4,12 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - registry/harbor/**/applicationset.yaml
+      - registry/harbor/applicationset.yaml
       - .github/workflows/test-harbor.yml
   push:
     branches: [main]
     paths:
-      - registry/harbor/**/applicationset.yaml
+      - registry/harbor/applicationset.yaml
       - .github/workflows/test-harbor.yml
   workflow_dispatch:
 env:
@@ -113,9 +113,9 @@ jobs:
           argocd proj list
           kubectl get secrets -n argocd -l argocd.argoproj.io/secret-type=cluster
           echo "Validating Harbor ApplicationSet YAML..."
-          kubectl apply --dry-run=client -f registry/harbor/basic/applicationset.yaml
+          kubectl apply --dry-run=client -f registry/harbor/applicationset.yaml
           echo "Applying Harbor ApplicationSet..."
-          kubectl apply -f registry/harbor/basic/applicationset.yaml
+          kubectl apply -f registry/harbor/applicationset.yaml
           kubectl get applicationsets -n argocd
           echo "Waiting for ApplicationSet to generate applications..."
           sleep 30
