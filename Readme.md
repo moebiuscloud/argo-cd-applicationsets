@@ -12,25 +12,27 @@ Everyone needs monitoring, ingress, cert-manager, container registry, and other 
 
 ## The Solution
 
-Copy-paste ApplicationSets for the most common Kubernetes patterns. Opinionated, but working out of the box.
+ApplicationSets for the most common Kubernetes patterns. Opinionated, tested, and working out of the box.  
+Not pure copy-paste,  you should **fork this repo** and adapt the applicationsets to your own environment, escpecially the references to your own git repo.
 
 ## 📁 Available Templates
 
 - **[monitoring/](monitoring/)** - kube-prometheus-stack with Loki and Grafana dashboards
 - **[registry/harbor](registry/harbor)** - Harbor container registry with internal TLS
 
-
 ## 🎯 Philosophy
 
 **Very opinionated** - We don't know your requirements, so these templates make sensible defaults:
 
-- ✅ **Copy-paste ready** - Working ApplicationSets you can use immediately
+- ✅ **Fork and adapt** - Clone or fork the repo, adjust values to your needs
 - ✅ **Selector-based** - Uses ArgoCD cluster labels (add via IaC)
 - ✅ **Secure defaults** - Auto-generated secrets, no hardcoded passwords
 - ❌ **No ingress** - Too opinionated, every setup is different
 - ❌ **No custom domains** - You know your DNS setup, we don't
 
 ## 🚀 Quick Start
+
+0. **Fork this repo** and adjust the applicationsets to match your git Repo.
 
 1. **Label your clusters** in ArgoCD:
    ```bash
