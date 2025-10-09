@@ -24,13 +24,19 @@ spec:
         namespace: monitoring
       sources:
         # kube-prometheus-stack with enhanced Grafana configuration + Non-Root Security
+        # You need to change this to your own repo, or you will stick with my values file.
+        - repoURL: https://github.com/moebiuscloud/argo-cd-applicationsets.git
+          targetRevision: feature/remove_inline_helm_values
+          ref: values  # exposes $values to other sources
+
+
         - repoURL: https://prometheus-community.github.io/helm-charts
           chart: kube-prometheus-stack
           targetRevision: 77.12.0
           helm:
             releaseName: prometheus
             valueFiles:
-              - ../../applications/kube-prometheus-stack/values-basic.yaml
+              - $values/applications/kube-prometheus-stack/values-basic.yaml
 
         # Loki deployment with non-root security
         - repoURL: https://grafana.github.io/helm-charts
@@ -39,7 +45,7 @@ spec:
           helm:
             releaseName: loki
             valueFiles:
-              - ../../applications/loki/values-basic.yaml
+              - $values/applications/loki/values-basic.yaml
 
         # Promtail for log collection with non-root security
         - repoURL: https://grafana.github.io/helm-charts
@@ -48,7 +54,7 @@ spec:
           helm:
             releaseName: promtail
             valueFiles:
-              - ../../applications/promtail/values-basic.yaml
+              - $values/applications/promtail/values-basic.yaml
       syncPolicy:
         automated:
           prune: true
