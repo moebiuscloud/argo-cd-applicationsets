@@ -31,7 +31,7 @@ spec:
       sources:
         # You need to change this to your own repo, or you will stick with my values file.
         - repoURL: https://github.com/moebiuscloud/argo-cd-applicationsets.git
-          targetRevision: feature/remove_inline_helm_values
+          targetRevision: main
           ref: values  # exposes $values to other sources
         - repoURL: https://helm.goharbor.io
           chart: harbor
