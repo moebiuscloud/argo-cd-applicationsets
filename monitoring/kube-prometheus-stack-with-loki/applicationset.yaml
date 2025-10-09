@@ -36,7 +36,7 @@ spec:
           helm:
             releaseName: prometheus
             valueFiles:
-              - $values/applications/kube-prometheus-stack-with-loki/values-basic.yaml
+              - $values/applications/kube-prometheus-stack/values-basic.yaml
 
         # Loki deployment with non-root security
         - repoURL: https://grafana.github.io/helm-charts
