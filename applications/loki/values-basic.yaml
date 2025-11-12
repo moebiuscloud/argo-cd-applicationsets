@@ -1,48 +1,53 @@
 ---
 # Explicitly set deployment mode to SingleBinary
 deploymentMode: SingleBinary
-# Disable other deployment modes explicitly
+
 read:
   replicas: 0
 write:
   replicas: 0
 backend:
   replicas: 0
-# Configure or disable caching for SingleBinary mode
+
 chunksCache:
-  # For SingleBinary with filesystem storage, we can disable chunks cache
-  # or reduce memory significantly since it's not as critical
   enabled: false
 resultsCache:
-  # Results cache can be useful even in SingleBinary mode
   enabled: true
-  # Reduce memory allocation significantly
-  allocatedMemory: 512  # 512MB instead of default 1GB+
+  allocatedMemory: 512 # 512MB
+
 loki:
   commonConfig:
     replication_factor: 1
   storage:
     type: filesystem
 
-  # Auth disabled for internal use
+    # >>> ADD THESE: required by the chart even for filesystem
+    bucketNames:
+      chunks: loki-chunks
+      ruler: loki-ruler
+      admin: loki-admin
+    # (optional but nice when using persistence + filesystem)
+    filesystem:
+      chunks_directory: /var/loki/chunks
+      rules_directory: /var/loki/rules
+    # <<<
+
   auth_enabled: false
 
-  # Schema configuration
   schemaConfig:
     configs:
-      - from: 2024-04-01
-        store: tsdb
-        object_store: filesystem
-        schema: v13
-        index:
-          prefix: loki_index_
-          period: 24h
+    - from: 2024-04-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: loki_index_
+        period: 24h
 
-  # Server configuration
   server:
     grpc_listen_port: 9095
     http_listen_port: 3100
-# Single binary mode with non-root security
+
 singleBinary:
   replicas: 1
   persistence:
@@ -55,7 +60,6 @@ singleBinary:
     requests:
       cpu: 100m
       memory: 256Mi
-  # Non-root security context for Loki (Loki uses UID 10001 by default)
   podSecurityContext:
     runAsGroup: 10001
     runAsNonRoot: true
@@ -67,8 +71,8 @@ singleBinary:
     allowPrivilegeEscalation: false
     readOnlyRootFilesystem: true
     capabilities:
-      drop: [ALL]
-# Gateway configuration with non-root security
+      drop: [ ALL ]
+
 gateway:
   enabled: true
   service:
@@ -85,8 +89,8 @@ gateway:
     allowPrivilegeEscalation: false
     readOnlyRootFilesystem: true
     capabilities:
-      drop: [ALL]
-# Monitoring configuration
+      drop: [ ALL ]
+
 monitoring:
   serviceMonitor:
     enabled: true
@@ -96,6 +100,6 @@ monitoring:
     enabled: false
     grafanaAgent:
       installOperator: false
-# Test configuration
+
 test:
   enabled: false
