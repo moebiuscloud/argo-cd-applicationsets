@@ -1,0 +1,173 @@
+---
+# Mimir-distributed minimal configuration
+# Note: mimir-distributed does NOT support single-binary mode
+# This is a minimal distributed setup with 1 replica per component
+
+mimir:
+  structuredConfig:
+    limits:
+      max_global_series_per_user: 0
+      max_global_series_per_metric: 0
+      ingestion_rate: 100000
+      ingestion_burst_size: 200000
+
+# Minimal replicas for each component
+ingester:
+  replicas: 1
+  zoneAwareReplication:
+    enabled: false
+  persistentVolume:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 1
+      memory: 2Gi
+  podSecurityContext: &podSecurityContext
+    runAsGroup: 10001
+    runAsNonRoot: true
+    runAsUser: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext: &containerSecurityContext
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+
+distributor:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  podSecurityContext: *podSecurityContext
+  containerSecurityContext: *containerSecurityContext
+
+querier:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  podSecurityContext: *podSecurityContext
+  containerSecurityContext: *containerSecurityContext
+
+query_frontend:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  podSecurityContext: *podSecurityContext
+  containerSecurityContext: *containerSecurityContext
+
+query_scheduler:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  podSecurityContext: *podSecurityContext
+  containerSecurityContext: *containerSecurityContext
+
+compactor:
+  replicas: 1
+  persistentVolume:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 1
+      memory: 2Gi
+  podSecurityContext: *podSecurityContext
+  containerSecurityContext: *containerSecurityContext
+
+store_gateway:
+  replicas: 1
+  zoneAwareReplication:
+    enabled: false
+  persistentVolume:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  podSecurityContext: *podSecurityContext
+  containerSecurityContext: *containerSecurityContext
+
+# Disable optional components for minimal setup
+ruler:
+  enabled: false
+
+alertmanager:
+  enabled: false
+
+overrides_exporter:
+  enabled: false
+
+# Gateway/Nginx
+gateway:
+  enabledNonEnterprise: true
+  replicas: 1
+  podSecurityContext:
+    runAsGroup: 101
+    runAsNonRoot: true
+    runAsUser: 101
+    fsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+
+# Use MinIO for object storage (simpler for minimal setup)
+minio:
+  enabled: true
+  persistence:
+    size: 50Gi
+  podSecurityContext:
+    runAsGroup: 1000
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+
+# Disable rollout operator for minimal setup
+rollout_operator:
+  enabled: false
+
+# Monitoring
+metaMonitoring:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: prometheus
+  grafanaAgent:
+    enabled: false

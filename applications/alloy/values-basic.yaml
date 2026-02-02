@@ -1,0 +1,135 @@
+---
+# Grafana Alloy - OpenTelemetry Collector distribution
+# Replaces Promtail, collects logs, metrics, and traces
+
+alloy:
+  configMap:
+    create: true
+    content: |
+      // Kubernetes discovery
+      discovery.kubernetes "pods" {
+        role = "pod"
+      }
+
+      discovery.kubernetes "nodes" {
+        role = "node"
+      }
+
+      // ============================================
+      // LOGS - Send to Loki
+      // ============================================
+
+      loki.source.kubernetes "pods" {
+        targets    = discovery.kubernetes.pods.targets
+        forward_to = [loki.process.pods.receiver]
+      }
+
+      loki.process "pods" {
+        stage.cri {}
+
+        stage.labels {
+          values = {
+            namespace = "",
+            pod       = "",
+            container = "",
+          }
+        }
+
+        forward_to = [loki.write.loki.receiver]
+      }
+
+      loki.write "loki" {
+        endpoint {
+          url = "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+        }
+      }
+
+      // ============================================
+      // METRICS - Scrape and send to Mimir
+      // ============================================
+
+      prometheus.scrape "pods" {
+        targets    = discovery.kubernetes.pods.targets
+        forward_to = [prometheus.remote_write.mimir.receiver]
+
+        scrape_interval = "60s"
+      }
+
+      prometheus.operator.servicemonitors "servicemonitors" {
+        forward_to = [prometheus.remote_write.mimir.receiver]
+      }
+
+      prometheus.operator.podmonitors "podmonitors" {
+        forward_to = [prometheus.remote_write.mimir.receiver]
+      }
+
+      prometheus.remote_write "mimir" {
+        endpoint {
+          url = "http://mimir-gateway.monitoring.svc.cluster.local/api/v1/push"
+        }
+      }
+
+      // ============================================
+      // TRACES - Receive OTLP and send to Tempo
+      // ============================================
+
+      otelcol.receiver.otlp "default" {
+        grpc {
+          endpoint = "0.0.0.0:4317"
+        }
+        http {
+          endpoint = "0.0.0.0:4318"
+        }
+
+        output {
+          traces = [otelcol.processor.batch.default.input]
+        }
+      }
+
+      otelcol.processor.batch "default" {
+        output {
+          traces = [otelcol.exporter.otlp.tempo.input]
+        }
+      }
+
+      otelcol.exporter.otlp "tempo" {
+        client {
+          endpoint = "tempo.monitoring.svc.cluster.local:4317"
+          tls {
+            insecure = true
+          }
+        }
+      }
+
+  mounts:
+    varlog: true
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+      drop: [ALL]
+    readOnlyRootFilesystem: true
+
+controller:
+  type: daemonset
+
+  podSecurityContext:
+    runAsGroup: 0
+    runAsUser: 0
+    fsGroup: 0
+    seccompProfile:
+      type: RuntimeDefault
+
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: prometheus
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi

@@ -1,0 +1,166 @@
+---
+# Standalone Grafana for LGTM Stack
+adminPassword: ''  # Generates random 40-char password
+
+persistence:
+  enabled: true
+  size: 10Gi
+
+initChownData:
+  enabled: false
+
+# Non-root security context (Grafana runs as UID 472 by default)
+securityContext:
+  runAsGroup: 472
+  runAsNonRoot: true
+  runAsUser: 472
+  fsGroup: 472
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false  # Grafana needs to write to some directories
+  capabilities:
+    drop: [ALL]
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Enable sidecar for automatic datasource and dashboard discovery
+sidecar:
+  datasources:
+    enabled: true
+    defaultDatasourceEnabled: false
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 472
+      runAsGroup: 472
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+  dashboards:
+    enabled: true
+    searchNamespace: ALL
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 472
+      runAsGroup: 472
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+
+# LGTM Data sources with consistent UIDs for cross-linking
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Mimir
+        uid: mimir
+        type: prometheus
+        url: http://mimir-gateway.monitoring.svc.cluster.local/prometheus
+        access: proxy
+        isDefault: true
+        editable: true
+        jsonData:
+          httpMethod: POST
+          prometheusType: Mimir
+
+      - name: Loki
+        uid: loki
+        type: loki
+        url: http://loki-gateway.monitoring.svc.cluster.local
+        access: proxy
+        isDefault: false
+        editable: true
+        jsonData:
+          maxLines: 1000
+          derivedFields:
+            - datasourceUid: tempo
+              matcherRegex: "traceID=(\\w+)"
+              name: TraceID
+              url: "$${__value.raw}"
+
+      - name: Tempo
+        uid: tempo
+        type: tempo
+        url: http://tempo.monitoring.svc.cluster.local:3200
+        access: proxy
+        isDefault: false
+        editable: true
+        jsonData:
+          httpMethod: GET
+          tracesToLogs:
+            datasourceUid: loki
+            tags: ['job', 'instance', 'pod', 'namespace']
+            mappedTags: [{ key: 'service.name', value: 'service' }]
+            mapTagNamesEnabled: true
+            spanStartTimeShift: '-1h'
+            spanEndTimeShift: '1h'
+            filterByTraceID: true
+            filterBySpanID: false
+          tracesToMetrics:
+            datasourceUid: mimir
+            tags: [{ key: 'service.name', value: 'service' }]
+          serviceMap:
+            datasourceUid: mimir
+          nodeGraph:
+            enabled: true
+          lokiSearch:
+            datasourceUid: loki
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    # Mimir dashboards
+    mimir-overview:
+      gnetId: 17665
+      revision: 1
+      datasource: Mimir
+    # Kubernetes dashboards
+    kubernetes-cluster:
+      gnetId: 7249
+      revision: 1
+      datasource: Mimir
+    kubernetes-pods:
+      gnetId: 6417
+      revision: 1
+      datasource: Mimir
+    node-exporter:
+      gnetId: 1860
+      revision: 27
+      datasource: Mimir
+    # Loki dashboard
+    loki-logs:
+      gnetId: 13639
+      revision: 2
+      datasource: Loki
+    # Tempo dashboard
+    tempo-traces:
+      gnetId: 16698
+      revision: 1
+      datasource: Tempo
+
+serviceMonitor:
+  enabled: true
+  labels:
+    release: prometheus
