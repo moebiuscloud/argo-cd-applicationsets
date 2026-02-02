@@ -9,9 +9,7 @@ metadata:
 spec:
   generators:
     - clusters:
-        selector:
-          matchLabels:
-            lgtm: enabled
+
   template:
     metadata:
       name: '{{name}}-lgtm'
