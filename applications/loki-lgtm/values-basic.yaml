@@ -99,12 +99,10 @@ gateway:
     capabilities:
       drop: [ALL]
 
-# Monitoring - metrics go to Mimir via Alloy
+# Monitoring - disable ServiceMonitors (no Prometheus Operator CRDs)
 monitoring:
   serviceMonitor:
-    enabled: true
-    labels:
-      release: prometheus
+    enabled: false
   selfMonitoring:
     enabled: false
     grafanaAgent:

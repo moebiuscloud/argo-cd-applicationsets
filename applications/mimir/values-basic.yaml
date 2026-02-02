@@ -163,11 +163,9 @@ minio:
 rollout_operator:
   enabled: false
 
-# Monitoring
+# Monitoring - disable ServiceMonitors (no Prometheus Operator CRDs)
 metaMonitoring:
   serviceMonitor:
-    enabled: true
-    labels:
-      release: prometheus
+    enabled: false
   grafanaAgent:
     enabled: false

@@ -60,7 +60,6 @@ securityContext:
   seccompProfile:
     type: RuntimeDefault
 
+# Disable ServiceMonitor (no Prometheus Operator CRDs)
 serviceMonitor:
-  enabled: true
-  additionalLabels:
-    release: prometheus
+  enabled: false

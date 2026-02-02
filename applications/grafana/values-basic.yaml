@@ -160,7 +160,6 @@ dashboards:
       revision: 1
       datasource: Tempo
 
+# Disable ServiceMonitor (no Prometheus Operator CRDs)
 serviceMonitor:
-  enabled: true
-  labels:
-    release: prometheus
+  enabled: false

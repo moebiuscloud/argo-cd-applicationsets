@@ -45,22 +45,61 @@ alloy:
       }
 
       // ============================================
-      // METRICS - Scrape and send to Mimir
+      // METRICS - Scrape pods with prometheus.io annotations and send to Mimir
       // ============================================
 
+      // Filter pods with prometheus.io/scrape=true annotation
+      discovery.relabel "pods_with_metrics" {
+        targets = discovery.kubernetes.pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+          regex         = "true"
+          action        = "keep"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_port"]
+          target_label  = "__address__"
+          regex         = "(.+)"
+          replacement   = "${1}"
+          action        = "replace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_ip", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+          target_label  = "__address__"
+          regex         = "(.+);(.+)"
+          replacement   = "${1}:${2}"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+          target_label  = "__metrics_path__"
+          regex         = "(.+)"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+      }
+
       prometheus.scrape "pods" {
-        targets    = discovery.kubernetes.pods.targets
+        targets    = discovery.relabel.pods_with_metrics.output
         forward_to = [prometheus.remote_write.mimir.receiver]
 
         scrape_interval = "60s"
-      }
-
-      prometheus.operator.servicemonitors "servicemonitors" {
-        forward_to = [prometheus.remote_write.mimir.receiver]
-      }
-
-      prometheus.operator.podmonitors "podmonitors" {
-        forward_to = [prometheus.remote_write.mimir.receiver]
       }
 
       prometheus.remote_write "mimir" {
@@ -121,10 +160,9 @@ controller:
     seccompProfile:
       type: RuntimeDefault
 
+# Disable ServiceMonitor (no Prometheus Operator CRDs)
 serviceMonitor:
-  enabled: true
-  additionalLabels:
-    release: prometheus
+  enabled: false
 
 resources:
   limits:
