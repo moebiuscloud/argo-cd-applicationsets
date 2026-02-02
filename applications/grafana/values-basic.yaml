@@ -5,6 +5,7 @@ adminPassword: ''  # Generates random 40-char password
 persistence:
   enabled: true
   size: 10Gi
+  storageClass: csi-cinder-sc-delete
 
 initChownData:
   enabled: false

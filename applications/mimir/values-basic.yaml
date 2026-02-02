@@ -3,8 +3,20 @@
 # Note: mimir-distributed does NOT support single-binary mode
 # This is a minimal distributed setup with 1 replica per component
 
+# Fix DNS resolver for clusters not using standard kube-dns
+global:
+  dnsService: pck-ee6wklx-addon-coredns
+  dnsNamespace: kube-system
+
+# IMPORTANT: Disable Kafka-based ingest (new default in Mimir 3.x)
+kafka:
+  enabled: false
+
 mimir:
   structuredConfig:
+    # Disable Kafka ingest storage
+    ingest_storage:
+      enabled: false
     limits:
       max_global_series_per_user: 0
       max_global_series_per_metric: 0
@@ -19,6 +31,7 @@ ingester:
   persistentVolume:
     enabled: true
     size: 20Gi
+    storageClass: csi-cinder-sc-delete
   resources:
     requests:
       cpu: 100m
@@ -92,6 +105,7 @@ compactor:
   persistentVolume:
     enabled: true
     size: 20Gi
+    storageClass: csi-cinder-sc-delete
   resources:
     requests:
       cpu: 100m
@@ -109,6 +123,7 @@ store_gateway:
   persistentVolume:
     enabled: true
     size: 10Gi
+    storageClass: csi-cinder-sc-delete
   resources:
     requests:
       cpu: 100m
@@ -133,9 +148,6 @@ overrides_exporter:
 gateway:
   enabledNonEnterprise: true
   replicas: 1
-  # Fix DNS resolver for clusters not using standard kube-dns
-  nginx:
-    resolver: "10.96.0.10"  # CoreDNS ClusterIP
   podSecurityContext:
     runAsGroup: 101
     runAsNonRoot: true
@@ -154,6 +166,7 @@ minio:
   enabled: true
   persistence:
     size: 50Gi
+    storageClass: csi-cinder-sc-delete
   podSecurityContext:
     runAsGroup: 1000
     runAsNonRoot: true

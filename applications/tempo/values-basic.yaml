@@ -43,6 +43,7 @@ tempoQuery:
 persistence:
   enabled: true
   size: 10Gi
+  storageClass: csi-cinder-sc-delete
 
 resources:
   limits:

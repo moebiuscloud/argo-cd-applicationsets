@@ -3,6 +3,11 @@
 # Source: https://github.com/grafana/loki/tree/main/production/helm/loki
 # Receives logs from Alloy (OTel Collector)
 
+# Fix DNS resolver for clusters not using standard kube-dns
+global:
+  dnsService: pck-ee6wklx-addon-coredns
+  dnsNamespace: kube-system
+
 deploymentMode: SingleBinary
 
 loki:
@@ -58,6 +63,7 @@ singleBinary:
   persistence:
     enabled: true
     size: 10Gi
+    storageClass: csi-cinder-sc-delete
   resources:
     limits:
       cpu: 500m
@@ -86,9 +92,6 @@ gateway:
   service:
     type: ClusterIP
     port: 80
-  # Fix DNS resolver for clusters not using standard kube-dns
-  nginxConfig:
-    resolver: "10.96.0.10"  # CoreDNS ClusterIP
   podSecurityContext:
     runAsGroup: 101
     runAsNonRoot: true
