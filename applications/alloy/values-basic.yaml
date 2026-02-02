@@ -142,21 +142,13 @@ alloy:
 
   mounts:
     varlog: true
-    # Mount emptyDir for /tmp (needed for remotecfg service)
-    extra:
-      - name: tmp
-        mountPath: /tmp
-
-  extraVolumes:
-    - name: tmp
-      emptyDir: {}
 
   securityContext:
     allowPrivilegeEscalation: false
     capabilities:
       add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
       drop: [ALL]
-    readOnlyRootFilesystem: true
+    readOnlyRootFilesystem: false  # Alloy needs /tmp writable
 
 controller:
   type: daemonset
