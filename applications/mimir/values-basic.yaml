@@ -14,9 +14,12 @@ kafka:
 
 mimir:
   structuredConfig:
-    # Disable Kafka ingest storage
+    # Disable Kafka ingest storage - use classic architecture
     ingest_storage:
       enabled: false
+    # Re-enable Push gRPC (disabled by default when Kafka is expected)
+    ingester:
+      push_grpc_method_enabled: true
     limits:
       max_global_series_per_user: 0
       max_global_series_per_metric: 0
