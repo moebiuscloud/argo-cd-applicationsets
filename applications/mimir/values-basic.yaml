@@ -133,6 +133,9 @@ overrides_exporter:
 gateway:
   enabledNonEnterprise: true
   replicas: 1
+  # Fix DNS resolver for clusters not using standard kube-dns
+  nginx:
+    resolver: "10.96.0.10"  # CoreDNS ClusterIP
   podSecurityContext:
     runAsGroup: 101
     runAsNonRoot: true
