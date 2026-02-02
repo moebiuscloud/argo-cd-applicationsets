@@ -1,0 +1,114 @@
+---
+# Loki Helm chart configuration for LGTM Stack
+# Source: https://github.com/grafana/loki/tree/main/production/helm/loki
+# Receives logs from Alloy (OTel Collector)
+
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+
+  commonConfig:
+    replication_factor: 1
+
+  storage:
+    type: filesystem
+    bucketNames:
+      chunks: loki-chunks
+      ruler: loki-ruler
+      admin: loki-admin
+    filesystem:
+      chunks_directory: /var/loki/chunks
+      rules_directory: /var/loki/rules
+
+  schemaConfig:
+    configs:
+      - from: 2024-04-01
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  limits_config:
+    retention_period: 168h  # 7 days
+
+  server:
+    grpc_listen_port: 9095
+    http_listen_port: 3100
+
+  podSecurityContext:
+    fsGroup: 10001
+    fsGroupChangePolicy: OnRootMismatch
+    runAsGroup: 10001
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile:
+      type: RuntimeDefault
+
+  containerSecurityContext:
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+    allowPrivilegeEscalation: false
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# Disable read/write/backend for SingleBinary mode
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Disable caches for simple setup
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+
+# Gateway
+gateway:
+  enabled: true
+  service:
+    type: ClusterIP
+    port: 80
+  podSecurityContext:
+    runAsGroup: 101
+    runAsNonRoot: true
+    runAsUser: 101
+    fsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+
+# Monitoring - metrics go to Mimir via Alloy
+monitoring:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: prometheus
+  selfMonitoring:
+    enabled: false
+    grafanaAgent:
+      installOperator: false
+
+test:
+  enabled: false

@@ -1,0 +1,66 @@
+---
+# Tempo single-binary Helm chart configuration
+# Chart: grafana/tempo (NOT tempo-distributed)
+
+tempo:
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: http://mimir-gateway.monitoring.svc.cluster.local/api/v1/push
+
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+    zipkin:
+      endpoint: 0.0.0.0:9411
+    jaeger:
+      protocols:
+        thrift_http:
+          endpoint: 0.0.0.0:14268
+        grpc:
+          endpoint: 0.0.0.0:14250
+        thrift_binary:
+          endpoint: 0.0.0.0:6832
+        thrift_compact:
+          endpoint: 0.0.0.0:6831
+
+  retention: 168h  # 7 days
+
+tempoQuery:
+  enabled: true
+
+persistence:
+  enabled: true
+  size: 10Gi
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+securityContext:
+  runAsGroup: 10001
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: prometheus

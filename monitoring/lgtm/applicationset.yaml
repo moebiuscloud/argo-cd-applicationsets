@@ -1,0 +1,90 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: lgtm-stack
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: '1'
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            lgtm: enabled
+  template:
+    metadata:
+      name: '{{name}}-lgtm'
+      annotations:
+        argocd.argoproj.io/sync-wave: '1'
+    spec:
+      project: default
+      destination:
+        server: '{{server}}'
+        namespace: monitoring
+      sources:
+        # Values repository reference
+        # You need to change this to your own repo, or you will stick with my values file.
+        - repoURL: https://github.com/moebiuscloud/argo-cd-applicationsets.git
+          targetRevision: main
+          ref: values
+
+        # Mimir - Metrics backend (Prometheus-compatible)
+        # Source: https://github.com/grafana/mimir/tree/main/operations/helm/charts/mimir-distributed
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: mimir-distributed
+          targetRevision: 6.0.0
+          helm:
+            releaseName: mimir
+            valueFiles:
+              - $values/applications/mimir/values-basic.yaml
+
+        # Loki - Logs aggregation (receives from Alloy)
+        # Source: https://github.com/grafana/loki/tree/main/production/helm/loki
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: loki
+          targetRevision: 6.51.0
+          helm:
+            releaseName: loki
+            valueFiles:
+              - $values/applications/loki-lgtm/values-basic.yaml
+
+        # Tempo - Distributed tracing (single binary)
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: tempo
+          targetRevision: 1.24.0
+          helm:
+            releaseName: tempo
+            valueFiles:
+              - $values/applications/tempo/values-basic.yaml
+
+        # Grafana - Visualization
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: grafana
+          targetRevision: 8.10.0
+          helm:
+            releaseName: grafana
+            valueFiles:
+              - $values/applications/grafana/values-basic.yaml
+
+        # Alloy - OpenTelemetry Collector (replaces Promtail)
+        # Collects logs, metrics, and traces
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: alloy
+          targetRevision: 1.5.0
+          helm:
+            releaseName: alloy
+            valueFiles:
+              - $values/applications/alloy/values-basic.yaml
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions: [CreateNamespace=true, ServerSideApply=true]
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
