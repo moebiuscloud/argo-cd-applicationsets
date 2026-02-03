@@ -58,7 +58,7 @@ spec:
         # Grafana - Visualization
         - repoURL: https://grafana.github.io/helm-charts
           chart: grafana
-          targetRevision: 8.10.0
+          targetRevision: 8.15.0
           helm:
             releaseName: grafana
             valueFiles:
