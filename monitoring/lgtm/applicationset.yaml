@@ -49,7 +49,7 @@ spec:
         # Tempo - Distributed tracing (single binary)
         - repoURL: https://grafana.github.io/helm-charts
           chart: tempo
-          targetRevision: 1.24.0
+          targetRevision: 1.24.4
           helm:
             releaseName: tempo
             valueFiles:
