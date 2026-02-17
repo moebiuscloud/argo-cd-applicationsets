@@ -68,7 +68,7 @@ spec:
         # Collects logs, metrics, and traces
         - repoURL: https://grafana.github.io/helm-charts
           chart: alloy
-          targetRevision: 1.5.0
+          targetRevision: 1.6.0
           helm:
             releaseName: alloy
             valueFiles:
