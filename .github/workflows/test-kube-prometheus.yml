@@ -27,7 +27,7 @@ jobs:
       - name: Create lightweight kind cluster
         uses: helm/kind-action@v1
         with:
-          version: v0.29.0
+          version: v0.33.0
           kubectl_version: ${{ env.KUBECTL_VERSION }}
           cluster_name: test-cluster
           wait: 180s
