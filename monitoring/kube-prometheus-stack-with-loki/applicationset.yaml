@@ -28,11 +28,9 @@ spec:
         - repoURL: https://github.com/moebiuscloud/argo-cd-applicationsets.git
           targetRevision: main
           ref: values  # exposes $values to other sources
-
-
         - repoURL: https://prometheus-community.github.io/helm-charts
           chart: kube-prometheus-stack
-          targetRevision: 77.14.0
+          targetRevision: 91.5.0
           helm:
             releaseName: prometheus
             valueFiles:
@@ -53,8 +51,7 @@ spec:
           targetRevision: 6.17.1
           helm:
             releaseName: promtail
-            valueFiles:
-              - $values/applications/promtail/values-basic.yaml
+            valueFiles: [$values/applications/promtail/values-basic.yaml]
       syncPolicy:
         automated:
           prune: true

@@ -30,7 +30,7 @@ spec:
         # Source: https://github.com/grafana/mimir/tree/main/operations/helm/charts/mimir-distributed
         - repoURL: https://grafana.github.io/helm-charts
           chart: mimir-distributed
-          targetRevision: 6.1.0
+          targetRevision: 6.2.0
           helm:
             releaseName: mimir
             valueFiles:
@@ -68,12 +68,10 @@ spec:
         # Collects logs, metrics, and traces
         - repoURL: https://grafana.github.io/helm-charts
           chart: alloy
-          targetRevision: 1.10.0
+          targetRevision: 1.12.1
           helm:
             releaseName: alloy
-            valueFiles:
-              - $values/applications/alloy/values-basic.yaml
-
+            valueFiles: [$values/applications/alloy/values-basic.yaml]
       syncPolicy:
         automated:
           prune: true
